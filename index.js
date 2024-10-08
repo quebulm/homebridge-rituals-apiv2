@@ -10,6 +10,8 @@ const author = require('./package.json').author.name;
 
 let Service;
 let Characteristic;
+const REQUEST_LIMIT = 30;  // max. 30 requests per hour
+const POLLING_INTERVAL = 3 * 60 * 1000;  // Poll every 3 minutes to avoid exceeding rate limit
 
 module.exports = function(homebridge) {
     Service = homebridge.hap.Service;
@@ -122,14 +124,24 @@ function RitualsAccessory(log, config) {
 
     this.services.push(this.service);
     this.services.push(this.serviceInfo);
-    this.services.push(this.serviceBatt);
+    if (this.serviceBatt) this.services.push(this.serviceBatt);
     this.services.push(this.serviceFilter);
-    this.discover();
 
+    this.startPolling(); // Start polling with 3-minute interval to adhere to the rate limit
     this.log.debug('RitualsAccesory -> finish :: RitualsAccessory(log, config)');
 }
 
 RitualsAccessory.prototype = {
+    // Introduced polling to limit API requests to the rate limit (max 30 per hour)
+    startPolling: function() {
+        const pollData = () => {
+            this.log.debug('Polling data...');
+            this.discover();
+        };
+        pollData(); // Initial call
+        setInterval(pollData, POLLING_INTERVAL); // Set the interval to 3 minutes
+    },
+
     discover: function() {
         this.log.debug('RitualsAccesory -> init :: discover: function ()');
         this.log.debug('RitualsAccesory -> package :: ' + version);
