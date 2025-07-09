@@ -250,6 +250,7 @@ RitualsAccessory.prototype = {
     authenticateV2: function () {
         const that = this;
 
+        // Wenn wir schon zu oft probiert haben, abbrechen
         if (this.retryCount >= this.maxRetries) {
             this.log.error('Authentifizierung fehlgeschlagen nach mehreren Versuchen. Vorgang abgebrochen.');
             return;
@@ -262,33 +263,42 @@ RitualsAccessory.prototype = {
 
         client.post('apiv2/account/token', data, function (err, res, body) {
             if (err || res.statusCode !== 200) {
-                that.log.warn(`Authentifizierung fehlgeschlagen: ${err || 'HTTP ' + res.statusCode}`);
-                if (body) {
-                    that.log.debug('Antwort vom Server (Body): ' + JSON.stringify(body));
-                }
-                if (res && res.headers) {
-                    that.log.debug('Antwort vom Server (Headers): ' + JSON.stringify(res.headers));
-                }
-                that.retryCount++;
-                setTimeout(() => that.authenticateV2(), that.retryDelay);
+                that.log.warn(`Authentifizierung HTTP-Fehler: ${err || 'Status ' + res.statusCode}`);
+                if (body) that.log.debug('Body:', JSON.stringify(body));
+                that._scheduleRetry();
                 return;
             }
 
             if (!body || typeof body.success !== 'string') {
-                that.log.warn('Authentifizierung fehlgeschlagen: Token fehlt oder ungültig.');
-                that.log.debug('Antwort vom Server (Body): ' + JSON.stringify(body));
-                that.retryCount++;
-                setTimeout(() => that.authenticateV2(), that.retryDelay);
+                const msg = body?.message || 'kein success-Token';
+                that.log.warn(`Authentifizierung abgelehnt: ${msg}`);
+                that.log.debug('Server-Body:', JSON.stringify(body));
+
+                // Wenn Rate-Limit gemeldet, nextRetryDelay anpassen:
+                const m = /(\d+)\s+seconds/.exec(msg);
+                if (m) {
+                    const wait = parseInt(m[1], 10) * 1000;
+                    that.log.info(`Nächster Versuch in ${m[1]} s (Rate-Limit)`);
+                    setTimeout(() => that.authenticateV2(), wait);
+                } else {
+                    that._scheduleRetry();
+                }
                 return;
             }
 
+            // erfolgreich
             that.token = body.success;
             that.storage.put('token', that.token);
             that.retryCount = 0;
-
-            that.log.debug('Neuer Token erhalten: ' + that.token);
+            that.log.debug('Neuer Token erhalten:', that.token);
             that.getHub();
         });
+    },
+
+    // Hilfs-Methode, um standardisiert nach retryDelay erneut zu versuchen
+    _scheduleRetry: function() {
+        this.retryCount++;
+        setTimeout(() => this.authenticateV2(), this.retryDelay);
     },
 
     getHub: function () {
