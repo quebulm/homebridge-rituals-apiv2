@@ -264,7 +264,10 @@ RitualsAccessory.prototype = {
             if (err || res.statusCode !== 200) {
                 that.log.warn(`Authentifizierung fehlgeschlagen: ${err || 'HTTP ' + res.statusCode}`);
                 if (body) {
-                    that.log.debug('Antwort vom Server: ' + JSON.stringify(body));
+                    that.log.debug('Antwort vom Server (Body): ' + JSON.stringify(body));
+                }
+                if (res && res.headers) {
+                    that.log.debug('Antwort vom Server (Headers): ' + JSON.stringify(res.headers));
                 }
                 that.retryCount++;
                 setTimeout(() => that.authenticateV2(), that.retryDelay);
@@ -273,7 +276,7 @@ RitualsAccessory.prototype = {
 
             if (!body || typeof body.success !== 'string') {
                 that.log.warn('Authentifizierung fehlgeschlagen: Token fehlt oder ungültig.');
-                that.log.debug('Antwort vom Server (kein gültiger Token): ' + JSON.stringify(body));
+                that.log.debug('Antwort vom Server (Body): ' + JSON.stringify(body));
                 that.retryCount++;
                 setTimeout(() => that.authenticateV2(), that.retryDelay);
                 return;
