@@ -1,6 +1,6 @@
 # Homebridge-Rituals
 
-v1 is functional release, ENJOY!!
+API V2 Updated 
 
 <img src="https://img.shields.io/badge/stage-stable-green"> <img src="https://img.shields.io/badge/completion-90%25-yellow"> <img src="https://img.shields.io/badge/license-MIT-green"> <a href="https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=4YXRZVGSVNAEE&item_name=Just+for+a+coffe&currency_code=EUR&source=url"><img src="https://img.shields.io/static/v1?label=Buy%20me%20a%20coffee&message=using%20paypal&color=green"></a> <a align="right" href="https://github.com/myluna08/homebridge-rituals/blob/master/README.md">English</a>|<a align="right" href="https://github.com/myluna08/homebridge-rituals/blob/master/README_ES.md">Español</a>
 
@@ -150,6 +150,12 @@ Yeah, many work .. but you can helpme with a coffee .. <a href="https://www.payp
 Rituals & Genie are registered trademarks of Rituals Cosmetics Enterprise B.V.
 
 ## 07. ChangeLog
+- 2.0.0 Breaking Changes:
+  - Umstellung auf API v2 (alte API-Endpunkte werden nicht mehr genutzt)
+  - Neue Authentifizierungsmethode (`apiv2/account/token`)
+  - Vereinheitlichte HTTP-Kommunikation über `makeAuthenticatedRequest`
+  - Neues Caching für Statusdaten und Hub-Infos
+  - Abhängigkeit von `fanc`/`speedc`-Attributen aus APIv2
 - 1.1.15 Added API request rate limiting to avoid exceeding the maximum of 30 requests per hour.
 - 1.1.14 Fix error when homekit starts
 - 1.1.13 Fix error with StatusCodes

@@ -130,70 +130,159 @@ function RitualsAccessory(log, config) {
     this.cacheTimestamp = {};
     this.cacheDuration = 6 * 1000; // Cache duration in milliseconds (e.g., 6 seconds)
 
+    this.retryCount = 0;
+    this.maxRetries = 3;
+    this.retryDelay = 10000; // 10 Sekunden
+
     this.discover();
 
     this.log.debug('RitualsAccessory -> finish :: RitualsAccessory(log, config)');
 }
 
 RitualsAccessory.prototype = {
-    discover: function() {
-        this.log.debug('RitualsAccessory -> init :: discover: function ()');
-        this.log.debug('RitualsAccessory -> package :: ' + version);
-        this.storage.put('hub', this.hub);
-        var hash = this.storage.get('hash') || null;
-        var hb = this.storage.get('hub') || null;
-        if (hash) {
-            this.log.debug('RitualsAccessory -> hash found in local storage');
-            this.log.debug('RitualsAccessory -> HASH :: ' + hash);
-            if (hb) {
-                this.log.debug('RitualsAccessory -> hub found in local storage');
-                this.log.debug('RitualsAccessory -> HUB :: ' + hb);
-            } else {
-                this.getHub();
-            }
+    discover: function () {
+        this.log.debug('RitualsAccessory -> init :: discover()');
+
+        const storedToken = this.storage.get('token');
+        const storedHub = this.storage.get('hub');
+        this.token = storedToken || null;
+
+        // Fallback: Hub aus Storage validieren
+        if (!storedHub) {
+            this.log.warn('Kein Hub im Speicher gefunden. Wahrscheinlich Erststart.');
         } else {
-            this.getHash();
+            this.log.debug(`Hub aus Speicher geladen: ${storedHub}`);
         }
-        this.log.debug('RitualsAccessory -> finish :: discover: function ()');
+
+        // Token validieren
+        if (!this.token) {
+            this.log.debug('Kein gültiger Token gefunden – starte Authentifizierung...');
+            this.authenticateV2();
+        } else {
+            this.log.debug('Token vorhanden – versuche Zugriff auf Hub-Daten');
+            this.getHub(); // diese Methode macht jetzt den echten Request via makeAuthenticatedRequest
+        }
+
+        this.log.debug('RitualsAccessory -> finish :: discover()');
     },
 
-    getHash: function() {
+    makeAuthenticatedRequest: function (method, path, data, callback, retry = true) {
         const that = this;
-        this.log.debug('RitualsAccessory -> init :: getHash: function()');
-        var client = reqson.createClient('https://rituals.sense-company.com/');
-        var data = { email: this.account, password: this.password };
-        client.post('ocapi/login', data, function(err, res, body) {
+        const token = this.token || this.storage.get('token');
+
+        if (!token) {
+            this.log.warn('Kein gültiger Token vorhanden. Versuche Authentifizierung...');
+            this.authenticateV2AndThen(() => {
+                that.makeAuthenticatedRequest(method, path, data, callback, false);
+            });
+            return;
+        }
+
+        const client = reqson.createClient('https://rituals.sense-company.com/');
+        client.headers['Authorization'] = 'Bearer ' + token;
+
+        const requestCallback = function (err, res, body) {
             if (err) {
-                that.log.info(
-                    that.name + ' :: ERROR :: ocapi/login :: getHash() > ' + err
-                );
+                that.log.warn(`${method.toUpperCase()} ${path} fehlgeschlagen: ${err}`);
+                callback(err, null);
+                return;
             }
-            if (!err && res.statusCode != 200) {
-                that.log.debug(
-                    'RitualsAccessory -> ajax :: ocapi/login -> INVALID STATUS CODE :: ' +
-                    res.statusCode
-                );
-            } else {
-                that.log.debug(
-                    'RitualsAccessory -> ajax :: ocapi/login :: OK ' + res.statusCode
-                );
-                that.log.debug(
-                    'RitualsAccessory -> ajax :: ocapi/login :: RESPONSE :: ' + JSON.stringify(body)
-                );
-                that.storage.put('hash', body.account_hash);
-                that.log.debug(
-                    'RitualsAccessory -> ajax :: ocapi/login :: Setting hash in storage :: ' +
-                    body.account_hash
-                );
-                that.getHub();
+
+            if (res.statusCode === 401 && retry) {
+                that.log.warn(`401 Unauthorized für ${path}. Versuche Token neu zu holen...`);
+                that.storage.remove('token');
+                that.token = null;
+
+                that.authenticateV2AndThen(() => {
+                    that.makeAuthenticatedRequest(method, path, data, callback, false);
+                });
+                return;
             }
-        });
-        this.log.debug('RitualsAccessory -> finish :: getHash: function()');
+
+            if (res.statusCode >= 400) {
+                that.log.warn(`Fehler ${res.statusCode} bei ${method.toUpperCase()} ${path}`);
+                callback(new Error('HTTP ' + res.statusCode), null);
+                return;
+            }
+
+            callback(null, body);
+        };
+
+        if (method === 'get') {
+            client.get(path, requestCallback);
+        } else if (method === 'post') {
+            // URL-encoded senden
+            client.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+            client.post(path, data, requestCallback);
+        } else {
+            this.log.error('Ungültige HTTP-Methode: ' + method);
+        }
     },
 
-    getHub: function() {
+    authenticateV2AndThen: function (next) {
         const that = this;
-        this.log.debug('RitualsAccessory -> init :: getHub: function()');
+
+        if (this.retryCount >= this.maxRetries) {
+            this.log.error('Authentifizierung fehlgeschlagen nach mehreren Versuchen. Abbruch.');
+            return;
+        }
+
+        const client = reqson.createClient('https://rituals.sense-company.com/');
+        const data = { email: this.account, password: this.password };
+
+        client.post('apiv2/account/token', data, function (err, res, body) {
+            if (err || res.statusCode !== 200 || !body.success) {
+                that.retryCount++;
+                that.log.warn(`Token holen fehlgeschlagen (Versuch ${that.retryCount}): ${err || res.statusCode}`);
+                setTimeout(() => that.authenticateV2AndThen(next), that.retryDelay);
+                return;
+            }
+
+            that.token = body.success;
+            that.storage.put('token', that.token);
+            that.retryCount = 0;
+
+            that.log.debug('Token erfolgreich geholt: ' + that.token);
+            next();
+        });
+    },
+
+    authenticateV2: function () {
+        const that = this;
+
+        if (this.retryCount >= this.maxRetries) {
+            this.log.error('Authentifizierung fehlgeschlagen nach mehreren Versuchen. Vorgang abgebrochen.');
+            return;
+        }
+
+        this.log.debug(`Authentifizierung Versuch ${this.retryCount + 1}/${this.maxRetries}`);
+
+        const client = reqson.createClient('https://rituals.sense-company.com/');
+        const data = { email: this.account, password: this.password };
+
+        client.post('apiv2/account/token', data, function (err, res, body) {
+            if (err || res.statusCode !== 200 || !body.success) {
+                that.log.warn(`Authentifizierung fehlgeschlagen: ${err || res.statusCode}`);
+
+                that.retryCount++;
+                setTimeout(() => {
+                    that.authenticateV2(); // Retry mit Delay
+                }, that.retryDelay);
+                return;
+            }
+
+            that.token = body.success;
+            that.storage.put('token', that.token);
+            that.retryCount = 0; // Reset
+
+            that.log.debug('Neuer Token erhalten: ' + that.token);
+            that.getHub();
+        });
+    },
+
+    getHub: function () {
+        const that = this;
+        this.log.debug('RitualsAccessory -> init :: getHub()');
 
         const now = Date.now();
         if (this.cacheTimestamp.getHub && (now - this.cacheTimestamp.getHub) < this.cacheDuration) {
@@ -202,118 +291,86 @@ RitualsAccessory.prototype = {
             return;
         }
 
-        var client = reqson.createClient('https://rituals.sense-company.com/');
-        client.get('api/account/hubs/' + that.storage.get('hash'), function(
-            err,
-            res,
-            body
-        ) {
+        this.makeAuthenticatedRequest('get', 'apiv2/account/hubs', null, function (err, body) {
             if (err) {
-                that.log.info(
-                    that.name + ' :: ERROR :: api/account/hubs :: getHub() > ' + err
-                );
-                that.log.info('That means GENIE servers are down!');
-            } else {
-                if (!err && res.statusCode != 200) {
-                    that.log.debug(
-                        'RitualsAccessory -> ajax :: api/account/hubs/ -> INVALID STATUS CODE :: ' +
-                        res.statusCode
-                    );
-                } else {
-                    that.log.debug(
-                        'RitualsAccessory -> ajax :: api/account/hubs/ OK :: ' +
-                        res.statusCode
-                    );
-                    that.log.debug(
-                        'RitualsAccessory -> ajax :: api/account/hubs/ BODY.LENGTH :: ' +
-                        body.length +
-                        ' Genie in your account'
-                    );
-
-                    // Cache the data
-                    that.cache.getHubData = body;
-                    that.cacheTimestamp.getHub = now;
-
-                    that.applyHubData(body);
-                }
+                that.log.info(`${that.name} :: ERROR :: apiv2/account/hubs :: getHub() > ${err}`);
+                return;
             }
+
+            if (!Array.isArray(body)) {
+                that.log.warn('Ungültige Antwortstruktur erhalten, keine Hubs gefunden.');
+                return;
+            }
+
+            that.log.debug(`RitualsAccessory -> apiv2/account/hubs OK :: ${body.length} Genies gefunden`);
+
+            // Cache speichern
+            that.cache.getHubData = body;
+            that.cacheTimestamp.getHub = now;
+
+            that.applyHubData(body);
         });
-        this.log.debug('RitualsAccessory -> finish :: getHub: function()');
+
+        this.log.debug('RitualsAccessory -> finish :: getHub()');
     },
 
     applyHubData: function(body) {
         const that = this;
-        if (body.length == 1) {
+
+        if (!Array.isArray(body) || body.length === 0) {
+            that.log.warn('Keine Genies im Account gefunden.');
+            return;
+        }
+
+        if (body.length === 1) {
+            const hub = body[0];
             that.key = 0;
-            that.name = body[that.key].hub.attributes.roomnamec;
-            that.hublot = body[that.key].hub.hublot;
-            that.hub = body[that.key].hub.hash;
+            that.name = hub.attributeValues?.roomnamec || 'Genie';
+            that.hublot = hub.hublot;
+            that.hub = hub.hash;
+
             that.storage.put('key', that.key);
-            that.storage.put('name', body[that.key].hub.attributes.roomnamec);
-            that.storage.put('hublot', body[that.key].hub.hublot);
-            that.storage.put('hub', body[that.key].hub.hash);
-            that.storage.put(
-                'fragance',
-                body[that.key].hub.sensors.rfidc.title
-            );
+            that.storage.put('name', that.name);
+            that.storage.put('hublot', that.hublot);
+            that.storage.put('hub', that.hub);
+
+            // TODO
+            that.fragance = 'Unknown';
+            that.storage.put('fragance', that.fragance);
+
             that.log.debug('RitualsAccessory -> hub 1 genie updated');
         } else {
-            var found = false;
+            let found = false;
+
             Object.keys(body).forEach(function(key) {
-                if (body[key].hub.hash == that.hub) {
-                    that.log.debug(
-                        'RitualsAccessory -> ajax :: api/account/hubs/ :: HUB declared in config VALIDATED OK '
-                    );
+                const hub = body[key];
+                if (hub.hash === that.hub) {
                     found = true;
                     that.key = key;
-                    that.log.debug(
-                        'RitualsAccessory -> ajax :: api/account/hubs/ :: HUB Key is :: ' +
-                        key
-                    );
-                    that.name = body[key].hub.attributes.roomnamec;
-                    that.log.debug(
-                        'RitualsAccessory -> ajax :: api/account/hubs/ :: HUB Name :: ' +
-                        body[key].hub.attributes.roomnamec
-                    );
-                    that.hublot = body[key].hub.hublot;
-                    that.log.debug(
-                        'RitualsAccessory -> ajax :: api/account/hubs/ :: HUB Hublot :: ' +
-                        body[key].hub.hublot
-                    );
-                    that.fragance = body[key].hub.sensors.rfidc.title;
-                    that.log.debug(
-                        'RitualsAccessory -> ajax :: api/account/hubs/ :: SENSORS Fragance :: ' +
-                        body[key].hub.sensors.rfidc.title
-                    );
+                    that.name = hub.attributeValues?.roomnamec || 'Genie';
+                    that.hublot = hub.hublot;
+                    that.fragance = 'Unknown';
+
                     that.storage.put('key', key);
-                    that.storage.put('name', body[key].hub.attributes.roomnamec);
-                    that.storage.put('hublot', body[key].hub.hublot);
-                    that.storage.put(
-                        'fragance',
-                        body[key].hub.sensors.rfidc.title
-                    );
-                    that.log.debug(
-                        'RitualsAccessory -> ajax :: api/account/hubs/ :: Saved HUB preferences in Storage'
-                    );
+                    that.storage.put('name', that.name);
+                    that.storage.put('hublot', that.hublot);
+                    that.storage.put('fragance', that.fragance);
+
+                    that.log.debug('RitualsAccessory -> HUB matched and preferences stored');
                 }
             });
+
             if (!found) {
                 that.log.info('************************************************');
-                that.log.info('HUB in Config NOT validated! or NOT in Config');
-                that.log.info('please declare a correct section in config.json');
+                that.log.info('HUB in Config NOT validated or missing.');
+                that.log.info('Multiple Genies found, select correct one in config.json.');
                 that.log.info('************************************************');
-                that.log.info('There are multiple Genies found on your account');
-                that.log.info(
-                    'The HUB Key to identify Genie in your config.json is invalid, select the proper HUB key.'
-                );
-                that.log.info(
-                    'Put one of the following your config.json > https://github.com/myluna08/homebridge-rituals'
-                );
                 Object.keys(body).forEach(function(key) {
+                    const hub = body[key];
                     that.log.info('********************');
-                    that.log.info('Name   : ' + body[key].hub.attributes.roomnamec);
-                    that.log.info('Hublot : ' + body[key].hub.hublot);
-                    that.log.info('Hub    : ' + body[key].hub.hash);
+                    that.log.info('Name   : ' + (hub.attributeValues?.roomnamec || 'Unknown'));
+                    that.log.info('Hublot : ' + hub.hublot);
+                    that.log.info('Hub    : ' + hub.hash);
                     that.log.info('Key    : ' + key);
                 });
                 that.log.info('************************************************');
@@ -323,9 +380,7 @@ RitualsAccessory.prototype = {
 
     getCurrentState: function(callback) {
         const that = this;
-        this.log.debug(
-            'RitualsAccessory -> init :: getCurrentState: function(callback)'
-        );
+        this.log.debug('RitualsAccessory -> init :: getCurrentState()');
 
         const now = Date.now();
         if (this.cacheTimestamp.getCurrentState && (now - this.cacheTimestamp.getCurrentState) < this.cacheDuration) {
@@ -334,148 +389,62 @@ RitualsAccessory.prototype = {
             return;
         }
 
-        var client = reqson.createClient('https://rituals.sense-company.com/');
-        client.get('api/account/hub/' + that.storage.get('hub'), function(
-            err,
-            res,
-            body
-        ) {
-            if (err) {
-                that.log.info(
-                    that.name +
-                    ' :: ERROR :: api/account/hub :: getCurrentState() > ' +
-                    err
-                );
-                that.log.info('That means GENIE servers are down!');
-                callback(err);
-            }
-            else if (!err && res.statusCode != 200) {
-                that.log.debug(
-                    'RitualsAccessory -> ajax :: getCurrentState :: api/account/hub/ -> INVALID STATUS CODE :: ' +
-                    res.statusCode
-                );
-                that.log.info(
-                    that.name + ' getCurrentState => ' + res.statusCode
-                );
-                callback(new Error('Invalid status code: ' + res.statusCode));
-            } else {
-                that.log.debug(
-                    'RitualsAccessory -> ajax :: getCurrentState :: api/account/hub/ OK :: ' +
-                    res.statusCode
-                );
-                that.key = that.storage.get('key');
-                that.on_state =
-                    body.hub.attributes.fanc == '0' ? false : true;
-                that.fan_speed = parseInt(body.hub.attributes.speedc);
-                that.storage.put('version', body.hub.sensors.versionc);
+        const hub = that.storage.get('hub');
 
-                // Update cache
+        this.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/fanc`, null, function(err1, fancRes) {
+            if (err1) return callback(err1);
+
+            that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/speedc`, null, function(err2, speedRes) {
+                if (err2) return callback(err2);
+
+                that.on_state = fancRes.value === '1';
+                that.fan_speed = parseInt(speedRes.value);
                 that.cache.on_state = that.on_state;
                 that.cache.fan_speed = that.fan_speed;
                 that.cacheTimestamp.getCurrentState = now;
-            }
-            callback(null, that.on_state);
+
+                callback(null, that.on_state);
+            });
         });
-        this.log.debug(
-            'RitualsAccessory -> finish :: getCurrentState: function(callback)'
-        );
+
+        this.log.debug('RitualsAccessory -> finish :: getCurrentState()');
     },
 
     setActiveState: function(active, callback) {
         const that = this;
-        this.log.debug(
-            'RitualsAccessory -> init :: setActiveState: function(active, callback)'
-        );
-        this.log.debug('RitualsAccessory ->  setActiveState to ' + active);
-        this.log.info(that.name + ' :: Set ActiveState to => ' + active);
-        var setValue = active == true ? '1' : '0';
-        var client = reqson.createClient('https://rituals.sense-company.com/');
-        var data = { hub: that.hub, json: { attr: { fanc: setValue } } };
-        client.post('api/hub/update/attr', data, function(err, res, body) {
-            if (err) {
-                that.log.info(
-                    that.name +
-                    ' :: ERROR :: api/hub/update/attr :: setActiveState() > ' +
-                    err
-                );
-                callback(undefined, that.on_state);
-            } else if (!err && res.statusCode != 200) {
-                that.log.debug(
-                    'RitualsAccessory -> ajax :: setActiveState :: api/hub/update/attr/ -> INVALID STATUS CODE :: ' +
-                    res.statusCode
-                );
-                that.log.info(
-                    that.name + ' :: setActiveState => ' + res.statusCode + ' :: ' + err
-                );
-                callback(undefined, that.on_state);
-            } else {
-                that.log.debug(
-                    'RitualsAccessory -> ajax :: setActiveState :: api/hub/update/attr/ OK :: ' +
-                    res.statusCode
-                );
-                that.log.debug(
-                    'RitualsAccessory -> ajax :: setActiveState :: api/hub/update/attr/ BODY :: ' +
-                    JSON.stringify(body)
-                );
+        const hub = that.hub;
+        const setValue = active ? '1' : '0';
 
-                // Update cache
-                that.on_state = active;
-                that.cache.on_state = active;
-                that.cacheTimestamp.getCurrentState = Date.now();
+        this.log.info(`${that.name} :: Set ActiveState to => ${setValue}`);
+        const body = `fanc=${setValue}`;
 
-                callback(undefined, active);
-            }
+        this.makeAuthenticatedRequest('post', `apiv2/hubs/${hub}/attributes/fanc`, body, function(err, response) {
+            if (err) return callback(err, that.on_state);
+
+            that.on_state = active;
+            that.cache.on_state = active;
+            that.cacheTimestamp.getCurrentState = Date.now();
+
+            callback(null, active);
         });
-        this.log.debug(
-            'RitualsAccessory -> finish :: setActiveState: function(active, callback)'
-        );
     },
 
     setFanSpeed: function(value, callback) {
         const that = this;
-        this.log.debug(
-            'RitualsAccessory -> init :: setFanSpeed: function(value, callback)'
-        );
-        this.log.info(that.name + ' :: Set FanSpeed to => ' + value);
-        var client = reqson.createClient('https://rituals.sense-company.com/');
-        var data = { hub: that.hub, json: { attr: { speedc: value.toString() } } };
-        client.post('api/hub/update/attr', data, function(err, res, body) {
-            if (err) {
-                that.log.info(
-                    that.name + ' :: ERROR :: api/hub/update/attr :: setFanSpeed() > ' + err
-                );
-                callback(undefined, that.fan_speed);
-            }
-            else if (!err && res.statusCode != 200) {
-                that.log.debug(
-                    'RitualsAccessory -> ajax :: setFanSpeed :: api/hub/update/attr/ -> INVALID STATUS CODE :: ' +
-                    res.statusCode
-                );
-                that.log.info(
-                    that.name + ' :: setFanSpeed => ' + res.statusCode + ' :: ' + err
-                );
-                callback(undefined, that.fan_speed);
-            } else {
-                that.log.debug(
-                    'RitualsAccessory -> ajax :: setFanSpeed :: api/hub/update/attr/ OK :: ' +
-                    res.statusCode
-                );
-                that.log.debug(
-                    'RitualsAccessory -> ajax :: setFanSpeed :: api/hub/update/attr/ BODY :: ' +
-                    JSON.stringify(body)
-                );
+        const hub = that.hub;
+        const body = `speedc=${value.toString()}`;
 
-                // Update cache
-                that.fan_speed = value;
-                that.cache.fan_speed = value;
-                that.cacheTimestamp.getCurrentState = Date.now();
+        this.log.info(`${that.name} :: Set FanSpeed to => ${value}`);
 
-                callback(undefined, value);
-            }
+        this.makeAuthenticatedRequest('post', `apiv2/hubs/${hub}/attributes/speedc`, body, function(err, response) {
+            if (err) return callback(err, that.fan_speed);
+
+            that.fan_speed = value;
+            that.cache.fan_speed = value;
+            that.cacheTimestamp.getCurrentState = Date.now();
+
+            callback(null, value);
         });
-        this.log.debug(
-            'RitualsAccessory -> finish :: setFanSpeed: function(value, callback)'
-        );
     },
 
     identify: function(callback) {
