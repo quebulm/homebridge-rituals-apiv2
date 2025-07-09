@@ -261,19 +261,27 @@ RitualsAccessory.prototype = {
         const data = { email: this.account, password: this.password };
 
         client.post('apiv2/account/token', data, function (err, res, body) {
-            if (err || res.statusCode !== 200 || !body.success) {
-                that.log.warn(`Authentifizierung fehlgeschlagen: ${err || res.statusCode}`);
-
+            if (err || res.statusCode !== 200) {
+                that.log.warn(`Authentifizierung fehlgeschlagen: ${err || 'HTTP ' + res.statusCode}`);
+                if (body) {
+                    that.log.debug('Antwort vom Server: ' + JSON.stringify(body));
+                }
                 that.retryCount++;
-                setTimeout(() => {
-                    that.authenticateV2(); // Retry mit Delay
-                }, that.retryDelay);
+                setTimeout(() => that.authenticateV2(), that.retryDelay);
+                return;
+            }
+
+            if (!body || typeof body.success !== 'string') {
+                that.log.warn('Authentifizierung fehlgeschlagen: Token fehlt oder ungültig.');
+                that.log.debug('Antwort vom Server (kein gültiger Token): ' + JSON.stringify(body));
+                that.retryCount++;
+                setTimeout(() => that.authenticateV2(), that.retryDelay);
                 return;
             }
 
             that.token = body.success;
             that.storage.put('token', that.token);
-            that.retryCount = 0; // Reset
+            that.retryCount = 0;
 
             that.log.debug('Neuer Token erhalten: ' + that.token);
             that.getHub();
