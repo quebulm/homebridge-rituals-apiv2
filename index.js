@@ -77,7 +77,7 @@ function RitualsAccessory(log, config) {
     this.service
         .getCharacteristic(Characteristic.RotationSpeed)
         .setProps({
-            minValue: 0,
+            minValue: 1,
             maxValue: 3,
             minStep: 1
         })
@@ -534,7 +534,7 @@ RitualsAccessory.prototype = {
                 }
 
                 // Jetzt FanSpeed setzen
-                that.setFanSpeed(value, callback);  // rekursiver Aufruf
+                that.setFanSpeed(value, callback);
             });
         }
 

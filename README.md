@@ -1,6 +1,10 @@
 # Homebridge-Rituals
 
-API V2 Updated 
+This project is a fork and update of homebridge-rituals by myluna08.
+It has been adapted to work with the current Rituals API (v2) using Axios.
+
+Note: This README is adapted from the original homebridge-rituals project by myluna08.
+Changes reflect the update to API v2 and the switch to Axios.
 
 <img src="https://img.shields.io/badge/stage-stable-green"> <img src="https://img.shields.io/badge/completion-90%25-yellow"> <img src="https://img.shields.io/badge/license-MIT-green"> <a href="https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=4YXRZVGSVNAEE&item_name=Just+for+a+coffe&currency_code=EUR&source=url"><img src="https://img.shields.io/static/v1?label=Buy%20me%20a%20coffee&message=using%20paypal&color=green"></a> <a align="right" href="https://github.com/myluna08/homebridge-rituals/blob/master/README.md">English</a>|<a align="right" href="https://github.com/myluna08/homebridge-rituals/blob/master/README_ES.md">Español</a>
 
