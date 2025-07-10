@@ -33,19 +33,11 @@ Find more about on <a href="https://www.rituals.com/es-es/faqs.html?catid=faq-pe
 With npm -i or if you are using manual plugin module installation.
 
 ```sh
-npm -i homebridge-rituals
+npm -i homebridge-rituals-apiv2
 ```
 
-Otherwise you can use throught Homebridge UI-X the plugin search engine and just write : "homebridge-rituals" or "rituals" and click INSTALL
+Otherwise you can use throught Homebridge UI-X the plugin search engine and just write : "homebridge-rituals-apiv2" and click INSTALL
 
-## 02. Installation from zero
-
-0. This plugin is under development, (Unstable installation 0.0.x) (**stable installation 1.0.0 or greather..**)
-1. **Node v4.3.2 or greater is required.** Check by running: `node --version`. The plugins you use may require newer versions.
-2. **On Linux only:** Install the libavahi-compat-libdnssd-dev package: `sudo apt-get install libavahi-compat-libdnssd-dev`
-3. Install Homebridge using: `npm install -g homebridge` _or_ `sudo npm install -g --unsafe-perm homebridge` (see below)
-4. Install the plugins using: `npm install -g <plugin-name>`
-5. Create the `config.json` file.
 
 ## 03. Configuration in config.json
 
@@ -129,37 +121,20 @@ If you have more than one genie in your account, use the standard config for the
 
 4. Restart Homebridge
 
-## 04. Limitations
-
-- It will appears in you home app like a Fan Accessory.
-- You can control start/stop.
-- Fan control is not available in this release (see changelog).
-- You can't see other properties like in the app, maybe later.
-- The most important limitation, with this very first version you can only manage only 1 genie under the rituals account.
-
-## 05. Following Features Implementation (Nice to have in the future)
-
-- [x] Allow to control FAN rotator speed, Done!
-- [x] Allow to show battery level information, Done!
-- [x] Detection of Genie version 1.0 or 2.0 (Genie 2.0 does not have battery, accessory battery not shown)
-- [x] Added Debug traces
-- [x] Allow to show the fragance name
-- [ ] Allow to show the fragance quantity remains inside genie ¿?
-- [x] Allow to manage more than one genie if you can more than one in the same rituals account.
-
-Yeah, many work .. but you can helpme with a coffee .. <a href="https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=4YXRZVGSVNAEE&item_name=Just+for+a+coffee&currency_code=EUR&source=url"><img src="https://img.shields.io/static/v1?label=Buy%20me%20a%20coffe&message=using%20paypal&color=green"></a>
-
 ## 06. Credits && Trademarks
-
+This project is a fork and update of homebridge-rituals by myluna08.
 Rituals & Genie are registered trademarks of Rituals Cosmetics Enterprise B.V.
 
 ## 07. ChangeLog
+
 - 2.0.0 Breaking Changes:
   - Umstellung auf API v2 (alte API-Endpunkte werden nicht mehr genutzt)
   - Neue Authentifizierungsmethode (`apiv2/account/token`)
   - Vereinheitlichte HTTP-Kommunikation über `makeAuthenticatedRequest`
   - Neues Caching für Statusdaten und Hub-Infos
   - Abhängigkeit von `fanc`/`speedc`-Attributen aus APIv2
+- -------------------------- API V2 --------------------------
+by myluna08:
 - 1.1.15 Added API request rate limiting to avoid exceeding the maximum of 30 requests per hour.
 - 1.1.14 Fix error when homekit starts
 - 1.1.13 Fix error with StatusCodes
