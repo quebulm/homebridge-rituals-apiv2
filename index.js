@@ -213,7 +213,11 @@ RitualsAccessory.prototype = {
         } else if (method === 'post') {
             // URL-encoded senden
             client.headers['Content-Type'] = 'application/x-www-form-urlencoded';
-            client.post(path, data, requestCallback);
+
+            const querystring = require('querystring');
+            const encodedData = typeof data === 'string' ? data : querystring.stringify(data);
+
+            client.post(path, encodedData, requestCallback);
         } else {
             this.log.error('Ungültige HTTP-Methode: ' + method);
         }
