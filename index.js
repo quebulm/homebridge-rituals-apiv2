@@ -3,7 +3,9 @@
 const os = require('os');
 const path = require('path');
 const store = require('node-storage');
-const reqson = require('request-json');
+// const reqson = require('request-json');
+const axios = require('axios');
+const qs = require('querystring');
 
 const version = require('./package.json').version;
 const author = require('./package.json').author.name;
@@ -168,10 +170,9 @@ RitualsAccessory.prototype = {
     },
 
     makeAuthenticatedRequest: function (method, path, data, callback, retry = true) {
-        const that   = this;
-        const token  = this.token || this.storage.get('token');
+        const that = this;
+        const token = this.token || this.storage.get('token');
 
-        /* ---------- Token prüfen / ggf. erneuern ---------- */
         if (!token) {
             this.log.warn('Kein gültiger Token vorhanden → authentifiziere …');
             return this.authenticateV2AndThen(() => {
@@ -179,76 +180,64 @@ RitualsAccessory.prototype = {
             });
         }
 
-        /* ---------- Client vorbereiten ---------- */
-        const client = reqson.createClient('https://rituals.sense-company.com/');
-        client.headers['Authorization'] = token;
-        client.headers['Accept'] = '*/*';
+        const url = 'https://rituals.sense-company.com/' + path;
 
-        that.log.debug(`   AUTH: ${token.slice(0,30)}…`);
-
-        /* ---------- Callback für alle Requests ---------- */
-        const requestCallback = (err, res, body) => {
-            if (err) {
-                that.log.warn(`${method.toUpperCase()} ${path} fehlgeschlagen: ${err}`);
-                return callback(err);
-            }
-
-            /* 401 → Token refresh */
-            if (res.statusCode === 401 && retry) {
-                that.log.warn(`401 Unauthorized für ${path} – hole neuen Token`);
-                that.storage.remove('token');
-                that.token = null;
-                return that.authenticateV2AndThen(() => {
-                    that.makeAuthenticatedRequest(method, path, data, callback, false);
-                });
-            }
-
-            /* 4xx / 5xx */
-            if (res.statusCode >= 400) {
-                that.log.warn(`Fehler ${res.statusCode} bei ${method.toUpperCase()} ${path}`);
-                that.log.debug('Body:    ' + JSON.stringify(body));
-                that.log.debug('Headers: ' + JSON.stringify(res.headers));
-                return callback(new Error(`HTTP ${res.statusCode} – ${JSON.stringify(body)}`));
-            }
-
-            /* alles OK */
-            callback(null, body);
+        const headers = {
+            'Authorization': token,
+            'Accept': '*/*'
         };
 
-        /* ---------- GET ---------- */
-        if (method === 'get') {
-            that.log.debug(`→ GET  ${path}`);
-            return client.get(path, requestCallback);
-        }
+        const config = {
+            method: method,
+            url: url,
+            headers: headers,
+        };
 
-        /* ---------- POST (x-www-form-urlencoded) ---------- */
         if (method === 'post') {
             const bodyStr = typeof data === 'string'
                 ? data
-                : require('querystring').stringify(data);
+                : qs.stringify(data);
 
-            // Content-Type explizit im Header setzen
-            client.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+            headers['Content-Type'] = 'application/x-www-form-urlencoded';
+            config.data = bodyStr;
 
-            // Debug-Dump (optional)
             that.log.warn('==== REQUEST DUMP =================================');
-            that.log.warn('URL     : https://rituals.sense-company.com/' + path);
+            that.log.warn('URL     : ' + url);
             that.log.warn('Method  : POST');
-            that.log.warn('Headers : ' + JSON.stringify(client.headers));
+            that.log.warn('Headers : ' + JSON.stringify(headers));
             that.log.warn('BodyHex : ' + Buffer.from(bodyStr).toString('hex'));
             that.log.warn('BodyUtf8: ' + bodyStr);
             that.log.warn('===============================================');
-
-            // Verwende nur 3-Parameter-Signatur: (path, bodyStr, callback)
-            return client.post(
-                path,
-                bodyStr,
-                requestCallback
-            );
         }
 
-        /* ---------- Fallback ---------- */
-        this.log.error('Ungültige HTTP-Methode: ' + method);
+        if (method === 'get') {
+            that.log.debug(`→ GET ${path}`);
+        }
+
+        axios(config).then(response => {
+            callback(null, response.data);
+        }).catch(error => {
+            if (error.response) {
+                const res = error.response;
+
+                if (res.status === 401 && retry) {
+                    that.log.warn(`401 Unauthorized für ${path} – hole neuen Token`);
+                    that.storage.remove('token');
+                    that.token = null;
+                    return that.authenticateV2AndThen(() => {
+                        that.makeAuthenticatedRequest(method, path, data, callback, false);
+                    });
+                }
+
+                that.log.warn(`Fehler ${res.status} bei ${method.toUpperCase()} ${path}`);
+                that.log.debug('Body:    ' + JSON.stringify(res.data));
+                that.log.debug('Headers: ' + JSON.stringify(res.headers));
+                return callback(new Error(`HTTP ${res.status} – ${JSON.stringify(res.data)}`));
+            } else {
+                that.log.warn(`${method.toUpperCase()} ${path} fehlgeschlagen: ${error}`);
+                return callback(error);
+            }
+        });
     },
 
     authenticateV2AndThen: function (next) {
@@ -259,30 +248,38 @@ RitualsAccessory.prototype = {
             return;
         }
 
-        const client = reqson.createClient('https://rituals.sense-company.com/');
-        const data = { email: this.account, password: this.password };
+        const url = 'https://rituals.sense-company.com/apiv2/account/token';
+        const data = {
+            email: this.account,
+            password: this.password
+        };
 
-        client.post('apiv2/account/token', data, function (err, res, body) {
-            if (err || res.statusCode !== 200 || !body.success) {
+        axios.post(url, data)
+            .then(response => {
+                const body = response.data;
+
+                if (!body.success) {
+                    throw new Error('Kein success-Token erhalten');
+                }
+
+                that.token = body.success;
+                that.storage.put('token', that.token);
+                that.retryCount = 0;
+
+                that.log.debug('Token erfolgreich geholt: ' + that.token);
+                next();
+            })
+            .catch(err => {
                 that.retryCount++;
-                that.log.warn(`Token holen fehlgeschlagen (Versuch ${that.retryCount}): ${err || res.statusCode}`);
+                const status = err.response?.status || 'keine Antwort';
+                that.log.warn(`Token holen fehlgeschlagen (Versuch ${that.retryCount}): ${status}`);
                 setTimeout(() => that.authenticateV2AndThen(next), that.retryDelay);
-                return;
-            }
-
-            that.token = body.success;
-            that.storage.put('token', that.token);
-            that.retryCount = 0;
-
-            that.log.debug('Token erfolgreich geholt: ' + that.token);
-            next();
-        });
+            });
     },
 
     authenticateV2: function () {
         const that = this;
 
-        // Wenn wir schon zu oft probiert haben, abbrechen
         if (this.retryCount >= this.maxRetries) {
             this.log.error('Authentifizierung fehlgeschlagen nach mehreren Versuchen. Vorgang abgebrochen.');
             return;
@@ -290,41 +287,44 @@ RitualsAccessory.prototype = {
 
         this.log.debug(`Authentifizierung Versuch ${this.retryCount + 1}/${this.maxRetries}`);
 
-        const client = reqson.createClient('https://rituals.sense-company.com/');
-        const data = { email: this.account, password: this.password };
+        const url = 'https://rituals.sense-company.com/apiv2/account/token';
+        const data = {
+            email: this.account,
+            password: this.password
+        };
 
-        client.post('apiv2/account/token', data, function (err, res, body) {
-            if (err || res.statusCode !== 200) {
-                that.log.warn(`Authentifizierung HTTP-Fehler: ${err || 'Status ' + res.statusCode}`);
-                if (body) that.log.debug('Body:', JSON.stringify(body));
-                that._scheduleRetry();
-                return;
-            }
+        axios.post(url, data)
+            .then(response => {
+                const body = response.data;
 
-            if (!body || typeof body.success !== 'string') {
-                const msg = body?.message || 'kein success-Token';
-                that.log.warn(`Authentifizierung abgelehnt: ${msg}`);
-                that.log.debug('Server-Body:', JSON.stringify(body));
+                if (!body || typeof body.success !== 'string') {
+                    const msg = body?.message || 'kein success-Token';
+                    that.log.warn(`Authentifizierung abgelehnt: ${msg}`);
+                    that.log.debug('Server-Body:', JSON.stringify(body));
 
-                // Wenn Rate-Limit gemeldet, nextRetryDelay anpassen:
-                const m = /(\d+)\s+seconds/.exec(msg);
-                if (m) {
-                    const wait = parseInt(m[1], 10) * 1000;
-                    that.log.info(`Nächster Versuch in ${m[1]} s (Rate-Limit)`);
-                    setTimeout(() => that.authenticateV2(), wait);
-                } else {
-                    that._scheduleRetry();
+                    const m = /(\d+)\s+seconds/.exec(msg);
+                    if (m) {
+                        const wait = parseInt(m[1], 10) * 1000;
+                        that.log.info(`Nächster Versuch in ${m[1]} s (Rate-Limit)`);
+                        setTimeout(() => that.authenticateV2(), wait);
+                    } else {
+                        that._scheduleRetry();
+                    }
+                    return;
                 }
-                return;
-            }
 
-            // erfolgreich
-            that.token = body.success;
-            that.storage.put('token', that.token);
-            that.retryCount = 0;
-            that.log.debug('Neuer Token erhalten:', that.token);
-            that.getHub();
-        });
+                that.token = body.success;
+                that.storage.put('token', that.token);
+                that.retryCount = 0;
+                that.log.debug('Neuer Token erhalten:', that.token);
+                that.getHub();
+            })
+            .catch(err => {
+                const status = err.response?.status || 'Netzwerkfehler';
+                that.log.warn(`Authentifizierung HTTP-Fehler: ${status}`);
+                if (err.response?.data) that.log.debug('Body:', JSON.stringify(err.response.data));
+                that._scheduleRetry();
+            });
     },
 
     // Hilfs-Methode, um standardisiert nach retryDelay erneut zu versuchen
@@ -496,7 +496,7 @@ RitualsAccessory.prototype = {
         const setValue = active ? '1' : '0';
 
         const path = `apiv2/hubs/${hub}/attributes/fanc`;
-        const body = new URLSearchParams({ fanc: setValue }).toString();
+        const body = qs.stringify({ fanc: setValue });
 
         this.log.info(`${that.name} :: Set ActiveState to => ${setValue}`);
         this.log.debug(`POST URL: ${path}`);
@@ -540,7 +540,7 @@ RitualsAccessory.prototype = {
 
         // Fan ist an – direkt FanSpeed setzen
         const hub = that.hub;
-        const body = new URLSearchParams({ speedc: value.toString() }).toString();
+        const body = qs.stringify({ speedc: value.toString() });
         const url = `apiv2/hubs/${hub}/attributes/speedc`;
 
         that.log.debug(`POST URL: ${url}`);
