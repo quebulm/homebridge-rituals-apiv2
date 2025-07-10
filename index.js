@@ -425,11 +425,25 @@ RitualsAccessory.prototype = {
 
         const hub = that.storage.get('hub');
 
-        this.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/fanc`, null, function(err1, fancRes) {
+        this.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/fanc`, null, function(err1, fancResRaw) {
             if (err1) return callback(err1);
 
-            that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/speedc`, null, function(err2, speedRes) {
+            let fancRes;
+            try {
+                fancRes = JSON.parse(fancResRaw);
+            } catch (e) {
+                return callback(new Error('Fehler beim Parsen von fancRes: ' + e.message));
+            }
+
+            that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/speedc`, null, function(err2, speedResRaw) {
                 if (err2) return callback(err2);
+
+                let speedRes;
+                try {
+                    speedRes = JSON.parse(speedResRaw);
+                } catch (e) {
+                    return callback(new Error('Fehler beim Parsen von speedRes: ' + e.message));
+                }
 
                 that.on_state = fancRes.value === '1';
                 that.fan_speed = parseInt(speedRes.value);
@@ -450,10 +464,15 @@ RitualsAccessory.prototype = {
         const setValue = active ? '1' : '0';
 
         this.log.info(`${that.name} :: Set ActiveState to => ${setValue}`);
-        const body = `fanc=${setValue}`;
 
-        this.makeAuthenticatedRequest('post', `apiv2/hubs/${hub}/attributes/fanc`, body, function(err, response) {
-            if (err) return callback(err, that.on_state);
+        const path = `apiv2/hubs/${hub}/attributes/fanc`;  // KEIN fanc in body + URL
+        const body = `fanc=${setValue}`; // URL-encoded (kein JSON)
+
+        this.makeAuthenticatedRequest('post', path, body, function(err, response) {
+            if (err) {
+                that.log.warn(`Set ActiveState fehlgeschlagen mit Fehler: ${err.message}`);
+                return callback(err, that.on_state);
+            }
 
             that.on_state = active;
             that.cache.on_state = active;
