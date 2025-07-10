@@ -182,6 +182,9 @@ RitualsAccessory.prototype = {
         /* ---------- Client vorbereiten ---------- */
         const client = reqson.createClient('https://rituals.sense-company.com/');
         client.headers['Authorization'] = token;
+        client.headers['Accept'] = '*/*';
+
+        that.log.debug(`   AUTH: ${token.slice(0,30)}…`);
 
         /* ---------- Callback für alle Requests ---------- */
         const requestCallback = (err, res, body) => {
