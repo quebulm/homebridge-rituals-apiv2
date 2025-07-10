@@ -223,20 +223,20 @@ RitualsAccessory.prototype = {
 
         /* ---------- POST (x-www-form-urlencoded) ---------- */
         if (method === 'post') {
-            const bodyStr = (typeof data === 'string')
+            const bodyStr = typeof data === 'string'
                 ? data
                 : require('querystring').stringify(data);
 
-            const len = Buffer.byteLength(bodyStr, 'utf8');
-            client.headers['Content-Type']   = 'application/x-www-form-urlencoded';
-            client.headers['Content-Length'] = len;
+            const headers = {
+                'Content-Type'  : 'application/x-www-form-urlencoded',
+                'Content-Length': Buffer.byteLength(bodyStr, 'utf8')
+            };
 
             that.log.debug(`→ POST ${path}`);
-            that.log.debug(`   CT  : application/x-www-form-urlencoded`);
-            that.log.debug(`   LEN : ${len}`);
+            that.log.debug(`   HEAD: ${JSON.stringify(headers)}`);
             that.log.debug(`   BODY: ${bodyStr}`);
-            /* 4-Parameter-Signatur: url, body, Content-Type, cb */
-            return client.post(path, bodyStr, requestCallback);
+
+            return client.post(path, bodyStr, headers, requestCallback);
         }
 
         /* ---------- Fallback ---------- */
