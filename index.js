@@ -179,7 +179,7 @@ RitualsAccessory.prototype = {
         }
 
         const client = reqson.createClient('https://rituals.sense-company.com/');
-        client.headers['Authorization'] = 'Bearer ' + token;
+        client.headers['Authorization'] = token;
 
         const requestCallback = function (err, res, body) {
             if (err) {
