@@ -168,72 +168,77 @@ RitualsAccessory.prototype = {
     },
 
     makeAuthenticatedRequest: function (method, path, data, callback, retry = true) {
-        const that = this;
-        const token = this.token || this.storage.get('token');
+        const that   = this;
+        const token  = this.token || this.storage.get('token');
 
+        /* ---------- Token prüfen / ggf. erneuern ---------- */
         if (!token) {
-            this.log.warn('Kein gültiger Token vorhanden. Versuche Authentifizierung...');
-            this.authenticateV2AndThen(() => {
+            this.log.warn('Kein gültiger Token vorhanden → authentifiziere …');
+            return this.authenticateV2AndThen(() => {
                 that.makeAuthenticatedRequest(method, path, data, callback, false);
             });
-            return;
         }
 
+        /* ---------- Client vorbereiten ---------- */
         const client = reqson.createClient('https://rituals.sense-company.com/');
         client.headers['Authorization'] = token;
 
-        const requestCallback = function (err, res, body) {
+        /* ---------- Callback für alle Requests ---------- */
+        const requestCallback = (err, res, body) => {
             if (err) {
                 that.log.warn(`${method.toUpperCase()} ${path} fehlgeschlagen: ${err}`);
-                callback(err, null);
-                return;
+                return callback(err);
             }
 
+            /* 401 → Token refresh */
             if (res.statusCode === 401 && retry) {
-                that.log.warn(`401 Unauthorized für ${path}. Versuche Token neu zu holen...`);
+                that.log.warn(`401 Unauthorized für ${path} – hole neuen Token`);
                 that.storage.remove('token');
                 that.token = null;
-
-                that.authenticateV2AndThen(() => {
+                return that.authenticateV2AndThen(() => {
                     that.makeAuthenticatedRequest(method, path, data, callback, false);
                 });
-                return;
             }
 
+            /* 4xx / 5xx */
             if (res.statusCode >= 400) {
                 that.log.warn(`Fehler ${res.statusCode} bei ${method.toUpperCase()} ${path}`);
-
-                // Mehr Details
-                if (body) {
-                    that.log.debug(`Fehlermeldung Body: ${JSON.stringify(body)}`);
-                }
-                if (res && res.headers) {
-                    that.log.debug(`Fehlermeldung Headers: ${JSON.stringify(res.headers)}`);
-                }
-
-                callback(new Error(`HTTP ${res.statusCode} – ${JSON.stringify(body)}`), null);
-                return;
+                that.log.debug('Body:    ' + JSON.stringify(body));
+                that.log.debug('Headers: ' + JSON.stringify(res.headers));
+                return callback(new Error(`HTTP ${res.statusCode} – ${JSON.stringify(body)}`));
             }
 
+            /* alles OK */
             callback(null, body);
         };
 
+        /* ---------- GET ---------- */
         if (method === 'get') {
-            client.get(path, requestCallback);
-        } else if (method === 'post') {
-            // URL-encoded senden
-            client.headers['Content-Type'] = 'application/x-www-form-urlencoded';
-
-            const querystring = require('querystring');
-            const encodedData = typeof data === 'string' ? data : querystring.stringify(data);
-
-            client.post(path,
-                encodedData,
-                'application/x-www-form-urlencoded',
-                requestCallback);
-        } else {
-            this.log.error('Ungültige HTTP-Methode: ' + method);
+            that.log.debug(`→ GET  ${path}`);
+            return client.get(path, requestCallback);
         }
+
+        /* ---------- POST (x-www-form-urlencoded) ---------- */
+        if (method === 'post') {
+            const bodyStr = (typeof data === 'string')
+                ? data
+                : new URLSearchParams(data).toString();
+
+            that.log.debug(`→ POST ${path}`);
+            that.log.debug(`   CT  : application/x-www-form-urlencoded`);
+            that.log.debug(`   BODY: ${bodyStr}`);
+
+            /* 4-Parameter-Signatur: url, body, Content-Type, cb */
+            return client.post(
+                path,
+                bodyStr,
+                'application/x-www-form-urlencoded',
+                requestCallback
+            );
+        }
+
+        /* ---------- Fallback ---------- */
+        this.log.error('Ungültige HTTP-Methode: ' + method);
     },
 
     authenticateV2AndThen: function (next) {
