@@ -227,20 +227,22 @@ RitualsAccessory.prototype = {
                 ? data
                 : require('querystring').stringify(data);
 
+            // Content-Type explizit im Header setzen
+            client.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+
             // Debug-Dump (optional)
             that.log.warn('==== REQUEST DUMP =================================');
             that.log.warn('URL     : https://rituals.sense-company.com/' + path);
             that.log.warn('Method  : POST');
-            that.log.warn('Headers : { "Content-Type": "application/x-www-form-urlencoded" }');
+            that.log.warn('Headers : ' + JSON.stringify(client.headers));
             that.log.warn('BodyHex : ' + Buffer.from(bodyStr).toString('hex'));
             that.log.warn('BodyUtf8: ' + bodyStr);
             that.log.warn('===============================================');
 
-            // **4-Parameter-Signatur – 3. Param = reiner CT-String**
+            // Verwende nur 3-Parameter-Signatur: (path, bodyStr, callback)
             return client.post(
                 path,
                 bodyStr,
-                'application/x-www-form-urlencoded',
                 requestCallback
             );
         }
