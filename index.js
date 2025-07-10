@@ -201,7 +201,16 @@ RitualsAccessory.prototype = {
 
             if (res.statusCode >= 400) {
                 that.log.warn(`Fehler ${res.statusCode} bei ${method.toUpperCase()} ${path}`);
-                callback(new Error('HTTP ' + res.statusCode), null);
+
+                // Mehr Details
+                if (body) {
+                    that.log.debug(`Fehlermeldung Body: ${JSON.stringify(body)}`);
+                }
+                if (res && res.headers) {
+                    that.log.debug(`Fehlermeldung Headers: ${JSON.stringify(res.headers)}`);
+                }
+
+                callback(new Error(`HTTP ${res.statusCode} – ${JSON.stringify(body)}`), null);
                 return;
             }
 
