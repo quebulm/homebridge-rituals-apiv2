@@ -229,7 +229,9 @@ RitualsAccessory.prototype = {
 
             const headers = {
                 'Content-Type'  : 'application/x-www-form-urlencoded',
-                'Content-Length': Buffer.byteLength(bodyStr, 'utf8')
+                'Content-Length': Buffer.byteLength(bodyStr, 'utf8'),
+                'Authorization' : token,
+                'Accept'        : '*/*'
             };
 
             that.log.warn('==== REQUEST DUMP =================================');
