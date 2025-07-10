@@ -232,9 +232,13 @@ RitualsAccessory.prototype = {
                 'Content-Length': Buffer.byteLength(bodyStr, 'utf8')
             };
 
-            that.log.debug(`→ POST ${path}`);
-            that.log.debug(`   HEAD: ${JSON.stringify(headers)}`);
-            that.log.debug(`   BODY: ${bodyStr}`);
+            that.log.warn('==== REQUEST DUMP =================================');
+            that.log.warn('URL     : https://rituals.sense-company.com/' + path);
+            that.log.warn('Method  : POST');
+            that.log.warn('Headers : ' + JSON.stringify(headers, null, 2));
+            that.log.warn('BodyHex : ' + Buffer.from(bodyStr).toString('hex'));
+            that.log.warn('BodyUtf8: ' + bodyStr);
+            that.log.warn('===============================================');
 
             return client.post(path, bodyStr, headers, requestCallback);
         }
