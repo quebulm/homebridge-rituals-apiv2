@@ -439,7 +439,7 @@ RitualsAccessory.prototype = {
 
             if (that.on_state) {
                 // Nur wenn eingeschaltet, speedc abrufen TODO: Returns {}
-                that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/speedc`, null, function(err2, speedRes) {1
+                that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/speedc`, null, function(err2, speedRes) {
                     if (err2) {
                         that.log.debug(`Fehler beim Abrufen von speedc: ${err2}`);
                         return callback(err2);
@@ -502,15 +502,33 @@ RitualsAccessory.prototype = {
 
     setFanSpeed: function(value, callback) {
         const that = this;
+
+        this.log.info(`${that.name} :: Set FanSpeed to => ${value}`);
+
+        // Wenn Fan aus, erst einschalten
+        if (!that.on_state) {
+            this.log.debug('Fan ist aus – schalte zuerst ein');
+
+            return this.setActiveState(true, function(err) {
+                if (err) {
+                    that.log.error(`Einschalten vor Speed-Setzen fehlgeschlagen: ${err.message}`);
+                    return callback(err, that.fan_speed);
+                }
+
+                // Jetzt FanSpeed setzen
+                that.setFanSpeed(value, callback);  // rekursiver Aufruf
+            });
+        }
+
+        // Fan ist an – direkt FanSpeed setzen
         const hub = that.hub;
         const body = `speedc=${value.toString()}`;
         const url = `apiv2/hubs/${hub}/attributes/speedc`;
 
-        this.log.info(`${that.name} :: Set FanSpeed to => ${value}`);
-        this.log.debug(`POST URL: ${url}`);
-        this.log.debug(`POST Body (x-www-form-urlencoded): ${body}`);
+        that.log.debug(`POST URL: ${url}`);
+        that.log.debug(`POST Body (x-www-form-urlencoded): ${body}`);
 
-        this.makeAuthenticatedRequest('post', url, body, function(err, response) {
+        that.makeAuthenticatedRequest('post', url, body, function(err, response) {
             if (err) {
                 that.log.error(`Fehler beim Setzen der FanSpeed: ${err.message}`);
                 return callback(err, that.fan_speed);
