@@ -478,7 +478,7 @@ RitualsAccessory.prototype = {
         const setValue = active ? '1' : '0';
 
         const path = `apiv2/hubs/${hub}/attributes/fanc`;
-        const body = `fanc=${setValue}`;
+        const body = new URLSearchParams({ fanc: setValue }).toString();
 
         this.log.info(`${that.name} :: Set ActiveState to => ${setValue}`);
         this.log.debug(`POST URL: ${path}`);
@@ -522,7 +522,7 @@ RitualsAccessory.prototype = {
 
         // Fan ist an – direkt FanSpeed setzen
         const hub = that.hub;
-        const body = `speedc=${value.toString()}`;
+        const body = new URLSearchParams({ speedc: value.toString() }).toString();
         const url = `apiv2/hubs/${hub}/attributes/speedc`;
 
         that.log.debug(`POST URL: ${url}`);
