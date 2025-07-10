@@ -426,41 +426,21 @@ RitualsAccessory.prototype = {
         const hub = that.storage.get('hub');
         that.log.debug(`Abrufen des aktuellen Status für Hub: ${hub}`);
 
-        that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/fanc`, null, function(err1, fancResRaw) {
+        that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/fanc`, null, function(err1, fancRes) {
             if (err1) {
                 that.log.debug(`Fehler beim Abrufen von fanc: ${err1}`);
                 return callback(err1);
             }
 
-            that.log.debug(`fancResRaw erhalten: ${fancResRaw}`);
+            that.log.debug(`fancRes erhalten: ${JSON.stringify(fancRes)}`);
 
-            let fancRes;
-            try {
-                fancRes = JSON.parse(fancResRaw);
-            } catch (e) {
-                that.log.debug(`Fehler beim Parsen von fancResRaw: ${e.message}`);
-                return callback(new Error('Fehler beim Parsen von fancRes: ' + e.message));
-            }
-
-            that.log.debug(`Parsed fancRes: ${JSON.stringify(fancRes)}`);
-
-            that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/speedc`, null, function(err2, speedResRaw) {
+            that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/speedc`, null, function(err2, speedRes) {
                 if (err2) {
                     that.log.debug(`Fehler beim Abrufen von speedc: ${err2}`);
                     return callback(err2);
                 }
 
-                that.log.debug(`speedResRaw erhalten: ${speedResRaw}`);
-
-                let speedRes;
-                try {
-                    speedRes = JSON.parse(speedResRaw);
-                } catch (e) {
-                    that.log.debug(`Fehler beim Parsen von speedResRaw: ${e.message}`);
-                    return callback(new Error('Fehler beim Parsen von speedRes: ' + e.message));
-                }
-
-                that.log.debug(`Parsed speedRes: ${JSON.stringify(speedRes)}`);
+                that.log.debug(`speedRes erhalten: ${JSON.stringify(speedRes)}`);
 
                 that.on_state = fancRes.value === '1';
                 that.fan_speed = parseInt(speedRes.value);
