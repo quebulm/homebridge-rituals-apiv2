@@ -228,6 +228,7 @@ RitualsAccessory.prototype = {
             that.log.debug(`   CT  : application/x-www-form-urlencoded`);
             that.log.debug(`   BODY: ${bodyStr}`);
 
+            that.log.debug('   RAW: ' + Buffer.from(bodyStr).toString('hex'));
             /* 4-Parameter-Signatur: url, body, Content-Type, cb */
             return client.post(
                 path,
