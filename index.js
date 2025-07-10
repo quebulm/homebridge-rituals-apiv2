@@ -434,24 +434,38 @@ RitualsAccessory.prototype = {
 
             that.log.debug(`fancRes erhalten: ${JSON.stringify(fancRes)}`);
 
-            that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/speedc`, null, function(err2, speedRes) {
-                if (err2) {
-                    that.log.debug(`Fehler beim Abrufen von speedc: ${err2}`);
-                    return callback(err2);
-                }
+            that.on_state = fancRes.value === '1';
 
-                that.log.debug(`speedRes erhalten: ${JSON.stringify(speedRes)}`);
+            if (that.on_state) {
+                // Nur wenn eingeschaltet, speedc abrufen
+                that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/speedc`, null, function(err2, speedRes) {
+                    if (err2) {
+                        that.log.debug(`Fehler beim Abrufen von speedc: ${err2}`);
+                        return callback(err2);
+                    }
 
-                that.on_state = fancRes.value === '1';
-                that.fan_speed = parseInt(speedRes.value);
-                that.cache.on_state = that.on_state;
+                    that.log.debug(`speedRes erhalten: ${JSON.stringify(speedRes)}`);
+
+                    that.fan_speed = parseInt(speedRes.value);
+                    that.cache.fan_speed = that.fan_speed;
+                    that.cache.on_state = that.on_state;
+                    that.cacheTimestamp.getCurrentState = now;
+
+                    that.log.debug(`Aktueller Zustand -> on_state: ${that.on_state}, fan_speed: ${that.fan_speed}`);
+
+                    callback(null, that.on_state);
+                });
+            } else {
+                // Ausgeschaltet → keine speedc-Abfrage
+                that.fan_speed = 0;
                 that.cache.fan_speed = that.fan_speed;
+                that.cache.on_state = that.on_state;
                 that.cacheTimestamp.getCurrentState = now;
 
                 that.log.debug(`Aktueller Zustand -> on_state: ${that.on_state}, fan_speed: ${that.fan_speed}`);
 
                 callback(null, that.on_state);
-            });
+            }
         });
 
         this.log.debug('RitualsAccessory -> finish :: getCurrentState()');
