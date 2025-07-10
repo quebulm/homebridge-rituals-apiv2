@@ -133,7 +133,9 @@ Rituals & Genie are registered trademarks of Rituals Cosmetics Enterprise B.V.
   - Vereinheitlichte HTTP-Kommunikation über `makeAuthenticatedRequest`
   - Neues Caching für Statusdaten und Hub-Infos
   - Abhängigkeit von `fanc`/`speedc`-Attributen aus APIv2
-- -------------------------- API V2 --------------------------
+
+  -------------------------- API V2 --------------------------
+
 by myluna08:
 - 1.1.15 Added API request rate limiting to avoid exceeding the maximum of 30 requests per hour.
 - 1.1.14 Fix error when homekit starts
