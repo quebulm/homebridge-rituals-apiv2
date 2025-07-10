@@ -438,8 +438,8 @@ RitualsAccessory.prototype = {
             that.on_state = fancRes.value === '1';
 
             if (that.on_state) {
-                // Nur wenn eingeschaltet, speedc abrufen
-                that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/speedc`, null, function(err2, speedRes) {
+                // Nur wenn eingeschaltet, speedc abrufen TODO: Returns {}
+                that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/speedc`, null, function(err2, speedRes) {1
                     if (err2) {
                         that.log.debug(`Fehler beim Abrufen von speedc: ${err2}`);
                         return callback(err2);
@@ -477,16 +477,20 @@ RitualsAccessory.prototype = {
         const hub = that.hub;
         const setValue = active ? '1' : '0';
 
-        this.log.info(`${that.name} :: Set ActiveState to => ${setValue}`);
+        const path = `apiv2/hubs/${hub}/attributes/fanc`;
+        const body = `fanc=${setValue}`;
 
-        const path = `apiv2/hubs/${hub}/attributes/fanc`;  // KEIN fanc in body + URL
-        const body = `fanc=${setValue}`; // URL-encoded (kein JSON)
+        this.log.info(`${that.name} :: Set ActiveState to => ${setValue}`);
+        this.log.debug(`POST URL: ${path}`);
+        this.log.debug(`POST Body (x-www-form-urlencoded): ${body}`);
 
         this.makeAuthenticatedRequest('post', path, body, function(err, response) {
             if (err) {
                 that.log.warn(`Set ActiveState fehlgeschlagen mit Fehler: ${err.message}`);
                 return callback(err, that.on_state);
             }
+
+            that.log.debug(`Antwort von Server: ${JSON.stringify(response)}`);
 
             that.on_state = active;
             that.cache.on_state = active;
@@ -500,11 +504,19 @@ RitualsAccessory.prototype = {
         const that = this;
         const hub = that.hub;
         const body = `speedc=${value.toString()}`;
+        const url = `apiv2/hubs/${hub}/attributes/speedc`;
 
         this.log.info(`${that.name} :: Set FanSpeed to => ${value}`);
+        this.log.debug(`POST URL: ${url}`);
+        this.log.debug(`POST Body (x-www-form-urlencoded): ${body}`);
 
-        this.makeAuthenticatedRequest('post', `apiv2/hubs/${hub}/attributes/speedc`, body, function(err, response) {
-            if (err) return callback(err, that.fan_speed);
+        this.makeAuthenticatedRequest('post', url, body, function(err, response) {
+            if (err) {
+                that.log.error(`Fehler beim Setzen der FanSpeed: ${err.message}`);
+                return callback(err, that.fan_speed);
+            }
+
+            that.log.debug(`Antwort von Server: ${JSON.stringify(response)}`);
 
             that.fan_speed = value;
             that.cache.fan_speed = value;
