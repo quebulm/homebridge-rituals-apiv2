@@ -424,32 +424,51 @@ RitualsAccessory.prototype = {
         }
 
         const hub = that.storage.get('hub');
+        that.log.debug(`Abrufen des aktuellen Status für Hub: ${hub}`);
 
-        this.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/fanc`, null, function(err1, fancResRaw) {
-            if (err1) return callback(err1);
+        that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/fanc`, null, function(err1, fancResRaw) {
+            if (err1) {
+                that.log.debug(`Fehler beim Abrufen von fanc: ${err1}`);
+                return callback(err1);
+            }
+
+            that.log.debug(`fancResRaw erhalten: ${fancResRaw}`);
 
             let fancRes;
             try {
                 fancRes = JSON.parse(fancResRaw);
             } catch (e) {
+                that.log.debug(`Fehler beim Parsen von fancResRaw: ${e.message}`);
                 return callback(new Error('Fehler beim Parsen von fancRes: ' + e.message));
             }
 
+            that.log.debug(`Parsed fancRes: ${JSON.stringify(fancRes)}`);
+
             that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/speedc`, null, function(err2, speedResRaw) {
-                if (err2) return callback(err2);
+                if (err2) {
+                    that.log.debug(`Fehler beim Abrufen von speedc: ${err2}`);
+                    return callback(err2);
+                }
+
+                that.log.debug(`speedResRaw erhalten: ${speedResRaw}`);
 
                 let speedRes;
                 try {
                     speedRes = JSON.parse(speedResRaw);
                 } catch (e) {
+                    that.log.debug(`Fehler beim Parsen von speedResRaw: ${e.message}`);
                     return callback(new Error('Fehler beim Parsen von speedRes: ' + e.message));
                 }
+
+                that.log.debug(`Parsed speedRes: ${JSON.stringify(speedRes)}`);
 
                 that.on_state = fancRes.value === '1';
                 that.fan_speed = parseInt(speedRes.value);
                 that.cache.on_state = that.on_state;
                 that.cache.fan_speed = that.fan_speed;
                 that.cacheTimestamp.getCurrentState = now;
+
+                that.log.debug(`Aktueller Zustand -> on_state: ${that.on_state}, fan_speed: ${that.fan_speed}`);
 
                 callback(null, that.on_state);
             });
