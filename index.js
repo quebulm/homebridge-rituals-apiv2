@@ -613,7 +613,7 @@ RitualsAccessory.prototype = {
             that.cache.on_state = active;
             that.cacheTimestamp.getCurrentState = Date.now();
 
-            callback(null, active);
+            callback();
         });
     },
 
@@ -657,7 +657,7 @@ RitualsAccessory.prototype = {
             that.cache.fan_speed = value;
             that.cacheTimestamp.getCurrentState = Date.now();
 
-            callback(null, value);
+            callback();
         });
     },
 
