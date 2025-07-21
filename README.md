@@ -1,10 +1,14 @@
-# Homebridge-Rituals
+# Homebridge-Rituals-apiv2
 
-v1 is functional release, ENJOY!!
+This project is a update of homebridge-rituals by myluna08.
+It has been adapted to work with the current Rituals API (v2) using Axios.
 
-<img src="https://img.shields.io/badge/stage-stable-green"> <img src="https://img.shields.io/badge/completion-90%25-yellow"> <img src="https://img.shields.io/badge/license-MIT-green"> <a href="https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=4YXRZVGSVNAEE&item_name=Just+for+a+coffe&currency_code=EUR&source=url"><img src="https://img.shields.io/static/v1?label=Buy%20me%20a%20coffee&message=using%20paypal&color=green"></a> <a align="right" href="https://github.com/myluna08/homebridge-rituals/blob/master/README.md">English</a>|<a align="right" href="https://github.com/myluna08/homebridge-rituals/blob/master/README_ES.md">Español</a>
+> **Note:** This README and Projekt is adapted from the original [homebridge-rituals project by myluna08](https://github.com/myluna08/homebridge-rituals/tree/master).
+> Changes reflect the update to API v2 and the switch to Axios.
 
-<img src="https://user-images.githubusercontent.com/19808920/58770949-bd9c7900-857f-11e9-8558-5dfaffddffda.png" height="100"> <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRoyOlRgCEZSyCrf2Ika_luW6N9ridvyC1Genb49xCQyLbc5eMG&s" height="90" align="right"> <img src="https://www.rituals.com/dw/image/v2/BBKL_PRD/on/demandware.static/-/Sites-rituals-products/default/dw7656c020/images/zoom/1106834_WirelessperfumeDiffuserPROAPrimary.png?sw=500&sh=500&sm=fit&q=100" height="100" align="right">
+<img src="https://img.shields.io/badge/license-MIT-green"> 
+
+<img src="https://user-images.githubusercontent.com/19808920/58770949-bd9c7900-857f-11e9-8558-5dfaffddffda.png" height="100"> <img src="https://www.rituals.com/dw/image/v2/BBKL_PRD/on/demandware.static/-/Sites-rituals-products/default/dw7656c020/images/zoom/1106834_WirelessperfumeDiffuserPROAPrimary.png?sw=500&sh=500&sm=fit&q=100" height="100" align="right">
 
 Homebridge Rituals is a homebridge-plugin to manage a Rituals Genie over homebridge infrastructure.
 Homebridge is a lightweight NodeJS server you can run on your home network that emulates the iOS HomeKit API.
@@ -29,19 +33,11 @@ Find more about on <a href="https://www.rituals.com/es-es/faqs.html?catid=faq-pe
 With npm -i or if you are using manual plugin module installation.
 
 ```sh
-npm -i homebridge-rituals
+npm -i homebridge-rituals-apiv2
 ```
 
-Otherwise you can use throught Homebridge UI-X the plugin search engine and just write : "homebridge-rituals" or "rituals" and click INSTALL
+Otherwise you can use throught Homebridge UI-X the plugin search engine and just write : "homebridge-rituals-apiv2" and click INSTALL
 
-## 02. Installation from zero
-
-0. This plugin is under development, (Unstable installation 0.0.x) (**stable installation 1.0.0 or greather..**)
-1. **Node v4.3.2 or greater is required.** Check by running: `node --version`. The plugins you use may require newer versions.
-2. **On Linux only:** Install the libavahi-compat-libdnssd-dev package: `sudo apt-get install libavahi-compat-libdnssd-dev`
-3. Install Homebridge using: `npm install -g homebridge` _or_ `sudo npm install -g --unsafe-perm homebridge` (see below)
-4. Install the plugins using: `npm install -g <plugin-name>`
-5. Create the `config.json` file.
 
 ## 03. Configuration in config.json
 
@@ -125,31 +121,24 @@ If you have more than one genie in your account, use the standard config for the
 
 4. Restart Homebridge
 
-## 04. Limitations
-
-- It will appears in you home app like a Fan Accessory.
-- You can control start/stop.
-- Fan control is not available in this release (see changelog).
-- You can't see other properties like in the app, maybe later.
-- The most important limitation, with this very first version you can only manage only 1 genie under the rituals account.
-
-## 05. Following Features Implementation (Nice to have in the future)
-
-- [x] Allow to control FAN rotator speed, Done!
-- [x] Allow to show battery level information, Done!
-- [x] Detection of Genie version 1.0 or 2.0 (Genie 2.0 does not have battery, accessory battery not shown)
-- [x] Added Debug traces
-- [x] Allow to show the fragance name
-- [ ] Allow to show the fragance quantity remains inside genie ¿?
-- [x] Allow to manage more than one genie if you can more than one in the same rituals account.
-
-Yeah, many work .. but you can helpme with a coffee .. <a href="https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=4YXRZVGSVNAEE&item_name=Just+for+a+coffee&currency_code=EUR&source=url"><img src="https://img.shields.io/static/v1?label=Buy%20me%20a%20coffe&message=using%20paypal&color=green"></a>
-
 ## 06. Credits && Trademarks
-
+This project is a fork and update of homebridge-rituals by myluna08.
 Rituals & Genie are registered trademarks of Rituals Cosmetics Enterprise B.V.
 
 ## 07. ChangeLog
+
+- 2.0.0 Breaking Changes:
+  - Migrated from legacy API (ocapi, api/account/hubs) to API v2 (apiv2/...)
+  - New login mechanism using apiv2/account/token with bearer token handling
+  - Replaced per-call request-json with unified Axios-based makeAuthenticatedRequest()
+  - Added short-term caching to avoid redundant API calls
+  - Retry mechanism with exponential delay on auth failure
+  - Improved logging and error handling, including automatic reauthentication on 401 errors
+  - Access to hub state via apiv2/hubs/{hub}/attributes/{fanc,speedc} endpoints
+
+  -------------------------- API V2 --------------------------
+
+by myluna08:
 - 1.1.15 Added API request rate limiting to avoid exceeding the maximum of 30 requests per hour.
 - 1.1.14 Fix error when homekit starts
 - 1.1.13 Fix error with StatusCodes
