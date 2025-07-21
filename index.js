@@ -90,7 +90,11 @@ function RitualsAccessory(log, config) {
             maxValue: 3,
             minStep: 1
         })
-        .on('get', (callback) => callback(null, this.fan_speed))
+        .on('get', (callback) => {
+            // Wenn der Ventilator aus ist, liefere einen gültigen Minimalwert
+            const speed = this.on_state ? (this.fan_speed ?? 1) : 1;
+            callback(null, speed);
+        })
         .on('set', this.setFanSpeed.bind(this));
 
     this.serviceInfo = new Service.AccessoryInformation();
@@ -478,7 +482,11 @@ RitualsAccessory.prototype = {
 
                     that.log.debug(`speedRes erhalten: ${JSON.stringify(speedRes)}`);
 
-                    that.fan_speed = parseInt(speedRes.value);
+                    if (that.on_state) {
+                        that.fan_speed = parseInt(speedRes.value) || 1; // wenn API leer, mind. 1
+                    } else {
+                        that.fan_speed = 1; // wenn aus, trotzdem min gültiger Wert
+                    }
                     that.cache.fan_speed = that.fan_speed;
                     that.cache.on_state = that.on_state;
                     that.cacheTimestamp.getCurrentState = now;
