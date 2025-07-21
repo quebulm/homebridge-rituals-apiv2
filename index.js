@@ -30,6 +30,15 @@ function RitualsAccessory(log, config) {
     this.hub = config.hub || '';
     var dt = Math.floor(Math.random() * 10000) + 1;
 
+    // Add cache variables
+    this.cache = {};
+    this.cacheTimestamp = {};
+    this.cacheDuration = 6 * 1000; // Cache duration in milliseconds (e.g., 6 seconds)
+
+    this.retryCount = 0;
+    this.maxRetries = 3;
+    this.retryDelay = 10000; // 10 Sekunden
+
     this.log.debug('RitualsAccessory -> init :: RitualsAccessory(log, config)');
 
     this.storage = new store(
@@ -109,36 +118,40 @@ function RitualsAccessory(log, config) {
             .setCharacteristic(Characteristic.Name, 'Genie Battery');
     }
 
-    this.serviceFilter = new Service.FilterMaintenance('Filter', 'AirFresher');
-    this.serviceFilter
-        .setCharacteristic(
-            Characteristic.FilterChangeIndication,
-            Characteristic.FilterChangeIndication.FILTER_OK
-        )
-        .setCharacteristic(Characteristic.Name, this.fragance);
-
     //ChargingState.NOT_CHARGING (0)
     //ChargingState.CHARGING (1)
     //ChargingState.NOT_CHARGAEABLE (2)
     //StatusLowBattery.BATTERY_LEVEL_NORMAL (0)
     //StatusLowBattery.BATTERY_LEVEL_LOW (1)
 
+    // FilterMaintenance-Service: Füllstand + Duft anzeigen
+    this.serviceFilter = new Service.FilterMaintenance('Filter', 'AirFresher');
+
+    // Default-Duft aus dem Speicher nehmen
+    this.serviceFilter.setCharacteristic(Characteristic.Name, this.fragance);
+
+    // Füllstand als FilterLifeLevel in % (0 = leer, 100 = voll)
+    this.serviceFilter
+        .getCharacteristic(Characteristic.FilterLifeLevel)
+        .on('get', this.getFillState.bind(this));
+
+    // Wenn der Füllstand niedrig ist, Wartung auslösen
+    this.serviceFilter
+        .getCharacteristic(Characteristic.FilterChangeIndication)
+        .on('get', (callback) => {
+            const level = this.cache.fill_level || 100;
+            const indication = (level <= 20)
+                ? Characteristic.FilterChangeIndication.CHANGE_FILTER
+                : Characteristic.FilterChangeIndication.FILTER_OK;
+            callback(null, indication);
+        });
+
     this.services.push(this.service);
     this.services.push(this.serviceInfo);
     if (this.serviceBatt) this.services.push(this.serviceBatt);
     this.services.push(this.serviceFilter);
 
-    // Add cache variables
-    this.cache = {};
-    this.cacheTimestamp = {};
-    this.cacheDuration = 6 * 1000; // Cache duration in milliseconds (e.g., 6 seconds)
-
-    this.retryCount = 0;
-    this.maxRetries = 3;
-    this.retryDelay = 10000; // 10 Sekunden
-
     this.discover();
-
     this.log.debug('RitualsAccessory -> finish :: RitualsAccessory(log, config)');
 }
 
@@ -488,6 +501,84 @@ RitualsAccessory.prototype = {
         });
 
         this.log.debug('RitualsAccessory -> finish :: getCurrentState()');
+    },
+
+    getFillState: function(callback) {
+        const that = this;
+        this.log.debug('RitualsAccessory -> init :: getFillState()');
+
+        const now = Date.now();
+        if (this.cacheTimestamp.getFillState && (now - this.cacheTimestamp.getFillState) < this.cacheDuration) {
+            that.log.debug('Using cached data for getFillState');
+
+            // Zusätzlich sicherstellen, dass der Duftname in HomeKit aktuell ist
+            if (this.cache.fragrance_name) {
+                this.serviceFilter.updateCharacteristic(Characteristic.Name, this.cache.fragrance_name);
+            }
+
+            return callback(null, this.cache.fill_level);
+        }
+
+        const hub = that.storage.get('hub');
+        that.log.debug(`Abrufen des Füllstands für Hub: ${hub}`);
+
+        // 1. Fill-Level holen
+        that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/sensors/fillc`, null, function(err, fillRes) {
+            if (err) {
+                that.log.debug(`Fehler beim Abrufen von fillc: ${err}`);
+                return callback(err);
+            }
+
+            that.log.debug(`fillRes erhalten: ${JSON.stringify(fillRes)}`);
+
+            // fillRes.title ist z.B. "50-60%"
+            let fillPercent = 0;
+            if (fillRes && fillRes.title) {
+                const match = fillRes.title.match(/(\d+)-(\d+)%/);
+                if (match) {
+                    // Mittelwert aus der Range
+                    const low = parseInt(match[1], 10);
+                    const high = parseInt(match[2], 10);
+                    fillPercent = Math.round((low + high) / 2);
+                } else {
+                    // Falls nur ein einzelner Wert wie "80%" kommt
+                    const singleMatch = fillRes.title.match(/(\d+)%/);
+                    if (singleMatch) {
+                        fillPercent = parseInt(singleMatch[1], 10);
+                    }
+                }
+            }
+
+            // Clamp auf 0–100, falls was schiefgeht
+            if (fillPercent < 0 || fillPercent > 100) {
+                fillPercent = 0;
+            }
+
+            // Cache speichern
+            that.cache.fill_level = fillPercent;
+            that.cacheTimestamp.getFillState = now;
+
+            that.log.debug(`Aktueller Füllstand -> ${fillPercent}%`);
+
+            // 2. Duftnote abrufen
+            that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/sensors/rfidc`, null, function(err2, fragRes) {
+                if (!err2 && fragRes && fragRes.title) {
+                    const fragranceName = fragRes.title;
+                    that.cache.fragrance_name = fragranceName;
+                    that.log.debug(`Aktuelle Duftnote -> ${fragranceName}`);
+
+                    // HomeKit Filter-Namen aktualisieren
+                    that.serviceFilter.updateCharacteristic(Characteristic.Name, fragranceName);
+                } else if (err2) {
+                    that.log.debug(`Fehler beim Abrufen von rfidc: ${err2}`);
+                }
+
+                // Jetzt Callback mit Füllstand zurückgeben
+                callback(null, fillPercent);
+            });
+        });
+
+        this.log.debug('RitualsAccessory -> finish :: getFillState()');
     },
 
     setActiveState: function(active, callback) {
