@@ -1,0 +1,33 @@
+{
+  "pluginAlias": "Rituals",
+  "pluginType": "accessory",
+  "singular": true,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "accessory": {
+        "title": "Accessory Type",
+        "type": "string",
+        "default": "Rituals",
+        "readOnly": true
+      },
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "default": "Genie",
+        "required": true
+      },
+      "account": {
+        "title": "E-Mail Account",
+        "type": "string",
+        "required": true
+      },
+      "password": {
+        "title": "Passwort",
+        "type": "string",
+        "format": "password",
+        "required": true
+      }
+    }
+  }
+}
