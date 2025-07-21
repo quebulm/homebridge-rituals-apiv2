@@ -4,7 +4,7 @@ This project is a update of homebridge-rituals by myluna08.
 It has been adapted to work with the current Rituals API (v2) using Axios.
 
 > **Note:** This README and Projekt is adapted from the original [homebridge-rituals project by myluna08](https://github.com/myluna08/homebridge-rituals/tree/master).
-> Changes reflect the update to API v2 and the switch to Axios.
+> Changes reflect a modernization of the original plugin with updated Rituals API v2 support. 
 
 <img src="https://img.shields.io/badge/license-MIT-green"> 
 
@@ -41,7 +41,6 @@ Otherwise you can use throught Homebridge UI-X the plugin search engine and just
 
 ## 03. Configuration in config.json
 
-FOR 1 GENIE ONLY
 One installed, you must modify your config.json file and add the following data:
 
 1. accessory (Required) = "Rituals"
@@ -60,63 +59,6 @@ SAVE your config.json file and RESTART homebridge.
             "password": "yyyyyyy"
         }
     ],
-```
-
-MULTIPLE GENIES IN YOUR account
-If you have more than one genie in your account, use the standard config for the first time and see the LOG. The Genie identifiers should appear in the log. Then add the "hub" key in the config to indicate what genie you want to control.
-
-1. Declare standard mode
-
-```json
-    "accessories": [
-        {
-            "accessory": "Rituals",
-            "name": "Genie",
-            "account": "xxx@xxx.com",
-            "password": "yyyyyyy"
-        }
-    ],
-```
-
-2. Wait for the LOG , like this..
-
-```
-[7/1/2020, 1:24:44 PM] [Genie] Hub NOT validated!
-[7/1/2020, 1:24:44 PM] [Genie] There are multiple hubs found on your account
-[7/1/2020, 1:24:44 PM] [Genie] Key in your config.json is invalid, select the proper hub key.
-[7/1/2020, 1:24:44 PM] [Genie] Put one in your config.json > https://github.com/myluna08/homebridge-rituals
-[7/1/2020, 1:24:44 PM] [Genie] ---
-[7/1/2020, 1:24:44 PM] [Genie] Name: FirstGenie
-[7/1/2020, 1:24:44 PM] [Genie] Hublot: LOTXXX-XX-XXXXX-XXXXX
-[7/1/2020, 1:24:44 PM] [Genie] Hub: f0123456789f0123456789f0123456789f0123456789f0123456789f01234567
-[7/1/2020, 1:24:44 PM] [Genie] Key: 0
-
-[7/1/2020, 1:24:44 PM] [Genie] ---
-[7/1/2020, 1:24:44 PM] [Genie] Name: SecondGenie
-[7/1/2020, 1:24:44 PM] [Genie] Hublot: LOTXXX-XX-XXXXX-XXXXX
-[7/1/2020, 1:24:44 PM] [Genie] Hub: a0123456789a0123456789a0123456789a0123456789a0123456789a01234567
-[7/1/2020, 1:24:44 PM] [Genie] Key: 1
-```
-
-3. declare every accesory with the correspondent hub identifier
-
-```json
-"accessories": [
-    {
-        "accessory": "Rituals",
-        "name": "Genie 01",
-        "account": "xxx@xxx.com",
-        "password": "yyyyyyy",
-        "hub": "f0123456789f0123456789f0123456789f0123456789f0123456789f01234567"
-    },
-    {
-        "accessory": "Rituals",
-        "name": "Genie 02",
-        "account": "xxx@xxx.com",
-        "password": "yyyyyyy",
-        "hub": "a0123456789a0123456789a0123456789a0123456789a0123456789a01234567"
-    }
-],
 ```
 
 4. Restart Homebridge
