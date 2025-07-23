@@ -197,7 +197,7 @@ RitualsAccessory.prototype = {
             });
         }
 
-        const url = 'https://rituals.sense-company.com/' + path;
+        const url = 'https://rituals.apiv2.sense-company.com/' + path;
 
         const headers = {
             'Authorization': token,
@@ -265,7 +265,7 @@ RitualsAccessory.prototype = {
             return;
         }
 
-        const url = 'https://rituals.sense-company.com/apiv2/account/token';
+        const url = 'https://rituals.apiv2.sense-company.com/apiv2/account/token';
         const data = {
             email: this.account,
             password: this.password
@@ -304,7 +304,7 @@ RitualsAccessory.prototype = {
 
         this.log.debug(`Authentifizierung Versuch ${this.retryCount + 1}/${this.maxRetries}`);
 
-        const url = 'https://rituals.sense-company.com/apiv2/account/token';
+        const url = 'https://rituals.apiv2.sense-company.com/apiv2/account/token';
         const data = {
             email: this.account,
             password: this.password
