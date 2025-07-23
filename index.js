@@ -3,7 +3,6 @@
 const os = require('os');
 const path = require('path');
 const store = require('node-storage');
-// const reqson = require('request-json');
 const axios = require('axios');
 const qs = require('querystring');
 
@@ -91,7 +90,7 @@ function RitualsAccessory(log, config) {
             minStep: 1
         })
         .on('get', (callback) => {
-            // Wenn der Ventilator aus ist, liefere einen gültigen Minimalwert
+            // If the fan is off, return a valid minimum value
             const speed = this.on_state ? (this.fan_speed ?? 1) : 1;
             callback(null, speed);
         })
@@ -128,18 +127,18 @@ function RitualsAccessory(log, config) {
     //StatusLowBattery.BATTERY_LEVEL_NORMAL (0)
     //StatusLowBattery.BATTERY_LEVEL_LOW (1)
 
-    // FilterMaintenance-Service: Füllstand + Duft anzeigen
+    // FilterMaintenance service: display fill level + scent
     this.serviceFilter = new Service.FilterMaintenance('Filter', 'AirFresher');
 
-    // Default-Duft aus dem Speicher nehmen
+    // Retrieve the default scent from memory
     this.serviceFilter.setCharacteristic(Characteristic.Name, this.fragance);
 
-    // Füllstand als FilterLifeLevel in % (0 = leer, 100 = voll)
+    // Fill level as FilterLifeLevel in % (0 = empty, 100 = full)
     this.serviceFilter
         .getCharacteristic(Characteristic.FilterLifeLevel)
         .on('get', this.getFillState.bind(this));
 
-    // Wenn der Füllstand niedrig ist, Wartung auslösen
+    // Trigger maintenance when the fill level is low
     this.serviceFilter
         .getCharacteristic(Characteristic.FilterChangeIndication)
         .on('get', (callback) => {
@@ -167,19 +166,19 @@ RitualsAccessory.prototype = {
         const storedHub = this.storage.get('hub');
         this.token = storedToken || null;
 
-        // Fallback: Hub aus Storage validieren
+        // Fallback: validate hub from storage
         if (!storedHub) {
-            this.log.warn('Kein Hub im Speicher gefunden. Wahrscheinlich Erststart.');
+            this.log.warn('No hub found in storage. Probably first start.');
         } else {
-            this.log.debug(`Hub aus Speicher geladen: ${storedHub}`);
+            this.log.debug(`Hub loaded from storage: ${storedHub}`);
         }
 
-        // Token validieren
+        // Validate token
         if (!this.token) {
-            this.log.debug('Kein gültiger Token gefunden – starte Authentifizierung...');
+            this.log.debug('No valid token found – starting authentication…');
             this.authenticateV2();
         } else {
-            this.log.debug('Token vorhanden – versuche Zugriff auf Hub-Daten');
+            this.log.debug('Token available – attempting to access hub data');
             this.getHub(); // diese Methode macht jetzt den echten Request via makeAuthenticatedRequest
         }
 
@@ -191,7 +190,7 @@ RitualsAccessory.prototype = {
         const token = this.token || this.storage.get('token');
 
         if (!token) {
-            this.log.warn('Kein gültiger Token vorhanden → authentifiziere …');
+            this.log.warn('No valid token available → authenticating…');
             return this.authenticateV2AndThen(() => {
                 that.makeAuthenticatedRequest(method, path, data, callback, false);
             });
@@ -238,7 +237,7 @@ RitualsAccessory.prototype = {
                 const res = error.response;
 
                 if (res.status === 401 && retry) {
-                    that.log.warn(`401 Unauthorized für ${path} – hole neuen Token`);
+                    that.log.warn(`401 Unauthorized for ${path} - fetching new token`);
                     that.storage.remove('token');
                     that.token = null;
                     return that.authenticateV2AndThen(() => {
@@ -246,12 +245,12 @@ RitualsAccessory.prototype = {
                     });
                 }
 
-                that.log.warn(`Fehler ${res.status} bei ${method.toUpperCase()} ${path}`);
+                that.log.warn(`Error ${res.status} in ${method.toUpperCase()} ${path}`);
                 that.log.debug('Body:    ' + JSON.stringify(res.data));
                 that.log.debug('Headers: ' + JSON.stringify(res.headers));
                 return callback(new Error(`HTTP ${res.status} – ${JSON.stringify(res.data)}`));
             } else {
-                that.log.warn(`${method.toUpperCase()} ${path} fehlgeschlagen: ${error}`);
+                that.log.warn(`${method.toUpperCase()} ${path} failed: ${error}`);
                 return callback(error);
             }
         });
@@ -261,7 +260,7 @@ RitualsAccessory.prototype = {
         const that = this;
 
         if (this.retryCount >= this.maxRetries) {
-            this.log.error('Authentifizierung fehlgeschlagen nach mehreren Versuchen. Abbruch.');
+            this.log.error('Authentication failed after multiple attempts. Aborting..');
             return;
         }
 
@@ -276,20 +275,20 @@ RitualsAccessory.prototype = {
                 const body = response.data;
 
                 if (!body.success) {
-                    throw new Error('Kein success-Token erhalten');
+                    throw new Error('No success token received');
                 }
 
                 that.token = body.success;
                 that.storage.put('token', that.token);
                 that.retryCount = 0;
 
-                that.log.debug('Token erfolgreich geholt: ' + that.token);
+                that.log.debug('Token successfully retrieved: ' + that.token);
                 next();
             })
             .catch(err => {
                 that.retryCount++;
-                const status = err.response?.status || 'keine Antwort';
-                that.log.warn(`Token holen fehlgeschlagen (Versuch ${that.retryCount}): ${status}`);
+                const status = err.response?.status || 'no response';
+                that.log.warn(`Token retrieval failed (attempt ${that.retryCount}): ${status}`);
                 setTimeout(() => that.authenticateV2AndThen(next), that.retryDelay);
             });
     },
@@ -298,11 +297,11 @@ RitualsAccessory.prototype = {
         const that = this;
 
         if (this.retryCount >= this.maxRetries) {
-            this.log.error('Authentifizierung fehlgeschlagen nach mehreren Versuchen. Vorgang abgebrochen.');
+            this.log.error('Authentication failed after multiple attempts. Process aborted.');
             return;
         }
 
-        this.log.debug(`Authentifizierung Versuch ${this.retryCount + 1}/${this.maxRetries}`);
+        this.log.debug(`Authentication attempt ${this.retryCount + 1}/${this.maxRetries}`);
 
         const url = 'https://rituals.apiv2.sense-company.com/apiv2/account/token';
         const data = {
@@ -322,7 +321,7 @@ RitualsAccessory.prototype = {
                     const m = /(\d+)\s+seconds/.exec(msg);
                     if (m) {
                         const wait = parseInt(m[1], 10) * 1000;
-                        that.log.info(`Nächster Versuch in ${m[1]} s (Rate-Limit)`);
+                        that.log.info(`Next attempt in ${m[1]} s`);
                         setTimeout(() => that.authenticateV2(), wait);
                     } else {
                         that._scheduleRetry();
@@ -337,14 +336,14 @@ RitualsAccessory.prototype = {
                 that.getHub();
             })
             .catch(err => {
-                const status = err.response?.status || 'Netzwerkfehler';
-                that.log.warn(`Authentifizierung HTTP-Fehler: ${status}`);
+                const status = err.response?.status || 'Network error';
+                that.log.warn(`Authentication HTTP error: ${status}`);
                 if (err.response?.data) that.log.debug('Body:', JSON.stringify(err.response.data));
                 that._scheduleRetry();
             });
     },
 
-    // Hilfs-Methode, um standardisiert nach retryDelay erneut zu versuchen
+    // Helper method to retry after retryDelay in a standardized way
     _scheduleRetry: function() {
         this.retryCount++;
         setTimeout(() => this.authenticateV2(), this.retryDelay);
@@ -368,11 +367,11 @@ RitualsAccessory.prototype = {
             }
 
             if (!Array.isArray(body)) {
-                that.log.warn('Ungültige Antwortstruktur erhalten, keine Hubs gefunden.');
+                that.log.warn('Invalid response structure received, no hubs found.');
                 return;
             }
 
-            that.log.debug(`RitualsAccessory -> apiv2/account/hubs OK :: ${body.length} Genies gefunden`);
+            that.log.debug(`RitualsAccessory -> apiv2/account/hubs OK :: ${body.length} Genies found`);
 
             // Cache speichern
             that.cache.getHubData = body;
@@ -388,7 +387,7 @@ RitualsAccessory.prototype = {
         const that = this;
 
         if (!Array.isArray(body) || body.length === 0) {
-            that.log.warn('Keine Genies im Account gefunden.');
+            that.log.warn('No Genies found in the account.');
             return;
         }
 
@@ -464,7 +463,7 @@ RitualsAccessory.prototype = {
 
         that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/fanc`, null, function(err1, fancRes) {
             if (err1) {
-                that.log.debug(`Fehler beim Abrufen von fanc: ${err1}`);
+                that.log.debug(`Error while retrieving fanc: ${err1}`);
                 return callback(err1);
             }
 
@@ -476,11 +475,11 @@ RitualsAccessory.prototype = {
                 // Nur wenn eingeschaltet, speedc abrufen TODO: Returns {}
                 that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/speedc`, null, function(err2, speedRes) {
                     if (err2) {
-                        that.log.debug(`Fehler beim Abrufen von speedc: ${err2}`);
+                        that.log.debug(`Error while retrieving speedc: ${err2}`);
                         return callback(err2);
                     }
 
-                    that.log.debug(`speedRes erhalten: ${JSON.stringify(speedRes)}`);
+                    that.log.debug(`speedRes received: ${JSON.stringify(speedRes)}`);
 
                     if (that.on_state) {
                         that.fan_speed = parseInt(speedRes.value) || 1; // wenn API leer, mind. 1
@@ -491,7 +490,7 @@ RitualsAccessory.prototype = {
                     that.cache.on_state = that.on_state;
                     that.cacheTimestamp.getCurrentState = now;
 
-                    that.log.debug(`Aktueller Zustand -> on_state: ${that.on_state}, fan_speed: ${that.fan_speed}`);
+                    that.log.debug(`Current status -> on_state: ${that.on_state}, fan_speed: ${that.fan_speed}`);
 
                     callback(null, that.on_state);
                 });
@@ -502,7 +501,7 @@ RitualsAccessory.prototype = {
                 that.cache.on_state = that.on_state;
                 that.cacheTimestamp.getCurrentState = now;
 
-                that.log.debug(`Aktueller Zustand -> on_state: ${that.on_state}, fan_speed: ${that.fan_speed}`);
+                that.log.debug(`Current status -> on_state: ${that.on_state}, fan_speed: ${that.fan_speed}`);
 
                 callback(null, that.on_state);
             }
@@ -528,28 +527,28 @@ RitualsAccessory.prototype = {
         }
 
         const hub = that.storage.get('hub');
-        that.log.debug(`Abrufen des Füllstands für Hub: ${hub}`);
+        that.log.debug(`Retrieving fill level for hub: ${hub}`);
 
-        // 1. Fill-Level holen
+        // 1. Retrieve fill level
         that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/sensors/fillc`, null, function(err, fillRes) {
             if (err) {
-                that.log.debug(`Fehler beim Abrufen von fillc: ${err}`);
+                that.log.debug(`Error while retrieving fillc: ${err}`);
                 return callback(err);
             }
 
-            that.log.debug(`fillRes erhalten: ${JSON.stringify(fillRes)}`);
+            that.log.debug(`fillRes received: ${JSON.stringify(fillRes)}`);
 
-            // fillRes.title ist z.B. "50-60%"
+            // fillRes.title is e.g. “50-60%”
             let fillPercent = 0;
             if (fillRes && fillRes.title) {
                 const match = fillRes.title.match(/(\d+)-(\d+)%/);
                 if (match) {
-                    // Mittelwert aus der Range
+                    // Average value from the range
                     const low = parseInt(match[1], 10);
                     const high = parseInt(match[2], 10);
                     fillPercent = Math.round((low + high) / 2);
                 } else {
-                    // Falls nur ein einzelner Wert wie "80%" kommt
+                    // In case only a single value like “80%” is returned
                     const singleMatch = fillRes.title.match(/(\d+)%/);
                     if (singleMatch) {
                         fillPercent = parseInt(singleMatch[1], 10);
@@ -557,31 +556,31 @@ RitualsAccessory.prototype = {
                 }
             }
 
-            // Clamp auf 0–100, falls was schiefgeht
+            // Clamp to 0–100 in case something goes wrong
             if (fillPercent < 0 || fillPercent > 100) {
                 fillPercent = 0;
             }
 
-            // Cache speichern
+            // Save cache
             that.cache.fill_level = fillPercent;
             that.cacheTimestamp.getFillState = now;
 
-            that.log.debug(`Aktueller Füllstand -> ${fillPercent}%`);
+            that.log.debug(`Current fill level -> ${fillPercent}%`);
 
-            // 2. Duftnote abrufen
+            // 2. Retrieve fragrance note
             that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/sensors/rfidc`, null, function(err2, fragRes) {
                 if (!err2 && fragRes && fragRes.title) {
                     const fragranceName = fragRes.title;
                     that.cache.fragrance_name = fragranceName;
-                    that.log.debug(`Aktuelle Duftnote -> ${fragranceName}`);
+                    that.log.debug(`Current fragrance note -> ${fragranceName}`);
 
                     // HomeKit Filter-Namen aktualisieren
                     that.serviceFilter.updateCharacteristic(Characteristic.Name, fragranceName);
                 } else if (err2) {
-                    that.log.debug(`Fehler beim Abrufen von rfidc: ${err2}`);
+                    that.log.debug(`Error while retrieving rfidc: ${err2}`);
                 }
 
-                // Jetzt Callback mit Füllstand zurückgeben
+                // Now return callback with fill level
                 callback(null, fillPercent);
             });
         });
@@ -603,11 +602,11 @@ RitualsAccessory.prototype = {
 
         this.makeAuthenticatedRequest('post', path, body, function(err, response) {
             if (err) {
-                that.log.warn(`Set ActiveState fehlgeschlagen mit Fehler: ${err.message}`);
+                that.log.warn(`Set ActiveState failed with error: ${err.message}`);
                 return callback(err, that.on_state);
             }
 
-            that.log.debug(`Antwort von Server: ${JSON.stringify(response)}`);
+            that.log.debug(`Response from server: ${JSON.stringify(response)}`);
 
             that.on_state = active;
             that.cache.on_state = active;
