@@ -207,6 +207,7 @@ RitualsAccessory.prototype = {
             method: method,
             url: url,
             headers: headers,
+            timeout: 5000
         };
 
         if (method === 'post') {
