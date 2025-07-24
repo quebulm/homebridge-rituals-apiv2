@@ -314,8 +314,8 @@ RitualsAccessory.prototype = {
                 const body = response.data;
 
                 if (!body || typeof body.success !== 'string') {
-                    const msg = body?.message || 'kein success-Token';
-                    that.log.warn(`Authentifizierung abgelehnt: ${msg}`);
+                    const msg = body?.message || 'no success token';
+                    that.log.warn(`Authentication denied: ${msg}`);
                     that.log.debug('Server-Body:', JSON.stringify(body));
 
                     const m = /(\d+)\s+seconds/.exec(msg);
@@ -332,7 +332,7 @@ RitualsAccessory.prototype = {
                 that.token = body.success;
                 that.storage.put('token', that.token);
                 that.retryCount = 0;
-                that.log.debug('Neuer Token erhalten:', that.token);
+                that.log.debug('New token received:', that.token);
                 that.getHub();
             })
             .catch(err => {
@@ -459,7 +459,7 @@ RitualsAccessory.prototype = {
         }
 
         const hub = that.storage.get('hub');
-        that.log.debug(`Abrufen des aktuellen Status für Hub: ${hub}`);
+        that.log.debug(`Retrieving the current status for hub: ${hub}`);
 
         that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/fanc`, null, function(err1, fancRes) {
             if (err1) {
@@ -467,7 +467,7 @@ RitualsAccessory.prototype = {
                 return callback(err1);
             }
 
-            that.log.debug(`fancRes erhalten: ${JSON.stringify(fancRes)}`);
+            that.log.debug(`fancRes received: ${JSON.stringify(fancRes)}`);
 
             that.on_state = fancRes.value === '1';
 
@@ -621,22 +621,22 @@ RitualsAccessory.prototype = {
 
         this.log.info(`${that.name} :: Set FanSpeed to => ${value}`);
 
-        // Wenn Fan aus, erst einschalten
+        // If fan is off, turn it on first
         if (!that.on_state) {
-            this.log.debug('Fan ist aus – schalte zuerst ein');
+            this.log.debug('Fan is off – turn it on first');
 
             return this.setActiveState(true, function(err) {
                 if (err) {
-                    that.log.error(`Einschalten vor Speed-Setzen fehlgeschlagen: ${err.message}`);
+                    that.log.error(`Turning on before setting speed failed: ${err.message}`);
                     return callback(err, that.fan_speed);
                 }
 
-                // Jetzt FanSpeed setzen
+                // Now set FanSpeed
                 that.setFanSpeed(value, callback);
             });
         }
 
-        // Fan ist an – direkt FanSpeed setzen
+        // Fan is on – set FanSpeed directly
         const hub = that.hub;
         const body = qs.stringify({ speedc: value.toString() });
         const url = `apiv2/hubs/${hub}/attributes/speedc`;
@@ -646,11 +646,11 @@ RitualsAccessory.prototype = {
 
         that.makeAuthenticatedRequest('post', url, body, function(err, response) {
             if (err) {
-                that.log.error(`Fehler beim Setzen der FanSpeed: ${err.message}`);
+                that.log.error(`Error while setting FanSpeed: ${err.message}`);
                 return callback(err, that.fan_speed);
             }
 
-            that.log.debug(`Antwort von Server: ${JSON.stringify(response)}`);
+            that.log.debug(`Response from server: ${JSON.stringify(response)}`);
 
             that.fan_speed = value;
             that.cache.fan_speed = value;
