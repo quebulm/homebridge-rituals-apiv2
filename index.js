@@ -16,7 +16,7 @@ module.exports = function(homebridge) {
     Service = homebridge.hap.Service;
     Characteristic = homebridge.hap.Characteristic;
     homebridge.registerAccessory(
-        'homebridge-rituals',
+        'homebridge-rituals-apiv2',
         'Rituals',
         RitualsAccessory
     );
