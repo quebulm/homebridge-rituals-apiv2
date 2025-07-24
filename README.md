@@ -9,7 +9,7 @@ It has been adapted to work with the current Rituals API (v2) using Axios.
 > **Note:** This README and Projekt is adapted from the original [homebridge-rituals project by myluna08](https://github.com/myluna08/homebridge-rituals/tree/master).
 > Changes reflect the update to API v2 and the switch to Axios.
 
-<img src="https://img.shields.io/badge/license-MIT-green"> 
+<img src="https://img.shields.io/badge/license-MIT-green"> [![npm version](https://img.shields.io/npm/v/homebridge-rituals-apiv2.svg)](https://www.npmjs.com/package/homebridge-rituals-apiv2)
 
 <img src="https://user-images.githubusercontent.com/19808920/58770949-bd9c7900-857f-11e9-8558-5dfaffddffda.png" height="100"> <img src="https://www.rituals.com/dw/image/v2/BBKL_PRD/on/demandware.static/-/Sites-rituals-products/default/dw7656c020/images/zoom/1106834_WirelessperfumeDiffuserPROAPrimary.png?sw=500&sh=500&sm=fit&q=100" height="100" align="right">
 
