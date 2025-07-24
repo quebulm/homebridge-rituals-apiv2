@@ -1,7 +1,7 @@
 {
     "name": "homebridge-rituals-apiv2",
     "displayName": "Homebridge Rituals API v2",
-    "version": "2.0.1",
+    "version": "2.0.2",
     "description": "Rituals plugin for homebridge: https://github.com/nfarina/homebridge",
     "license": "MIT",
     "keywords": [
