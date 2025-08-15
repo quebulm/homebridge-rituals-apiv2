@@ -29,6 +29,7 @@
         "homebridge": ">=1.6.0"
     },
     "homebridge": {
+        "pluginType": "accessory",
         "schema": "config.schema.json"
     },
     "dependencies": {
