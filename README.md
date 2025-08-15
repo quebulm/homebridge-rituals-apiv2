@@ -3,9 +3,6 @@
 This project is a update of homebridge-rituals by myluna08.
 It has been adapted to work with the current Rituals API (v2) using Axios.
 
-> [!WARNING]  
-> This project is currently under active development. Adjustments are still being made, so it may not be fully functional yet.
-
 > **Note:** This README and Projekt is adapted from the original [homebridge-rituals project by myluna08](https://github.com/myluna08/homebridge-rituals/tree/master).
 > Changes reflect the update to API v2 and the switch to Axios.
 
