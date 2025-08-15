@@ -85,16 +85,26 @@ function RitualsAccessory(log, config) {
     this.service
         .getCharacteristic(Characteristic.RotationSpeed)
         .setProps({
-            minValue: 1,
-            maxValue: 3,
+            minValue: 0,   // HomeKit needs 0–100 %
+            maxValue: 100,
             minStep: 1
         })
         .on('get', (callback) => {
-            // If the fan is off, return a valid minimum value
-            const speed = this.on_state ? (this.fan_speed ?? 1) : 1;
-            callback(null, speed);
+            // If off -> 0%, otherwise mapping 1..3 -> percentage values
+            if (!this.on_state) return callback(null, 0);
+            const speed = this.fan_speed ?? 1; // 1..3
+            const pct = speed === 1 ? 33 : speed === 2 ? 66 : 100;
+            callback(null, pct);
         })
-        .on('set', this.setFanSpeed.bind(this));
+        .on('set', (value, callback) => {
+            // 1-3 intern values
+            const pct = Number(value);
+            const mapped =
+                pct <= 33 ? 1 :
+                    pct <= 66 ? 2 : 3;
+
+            this.setFanSpeed(mapped, callback);
+        });
 
     this.serviceInfo = new Service.AccessoryInformation();
     this.serviceInfo
