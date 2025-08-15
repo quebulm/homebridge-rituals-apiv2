@@ -98,12 +98,16 @@ function RitualsAccessory(log, config) {
         })
         .on('set', (value, callback) => {
             // 1-3 intern values
-            const pct = Number(value);
-            const mapped =
-                pct <= 33 ? 1 :
-                    pct <= 66 ? 2 : 3;
+            const pct = Math.max(0, Math.min(100, Math.round(Number(value))));
+            const mapped = (pct >= 67) ? 3 : (pct >= 34) ? 2 : 1;
 
-            this.setFanSpeed(mapped, callback);
+            this.setFanSpeed(mapped, (err) => {
+                if (err) return callback(err);
+                // Slider auf die exakten Buckets schnappen lassen
+                const snapPct = mapped === 3 ? 100 : mapped === 2 ? 66 : 33;
+                try { this.service.updateCharacteristic(Characteristic.RotationSpeed, snapPct); } catch (_) {}
+                callback();
+            });
         });
 
     this.serviceInfo = new Service.AccessoryInformation();
