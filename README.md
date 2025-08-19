@@ -53,13 +53,13 @@ SAVE your config.json file and RESTART homebridge.
 
 ```json
     "accessories": [
-        {
-            "accessory": "Rituals",
-            "name": "My Genie",
-            "account": "xxx@xxx.com",
-            "password": "yyyyyyy"
-        }
-    ],
+{
+"accessory": "Rituals",
+"name": "My Genie",
+"account": "xxx@xxx.com",
+"password": "yyyyyyy"
+}
+],
 ```
 
 MULTIPLE GENIES IN YOUR account
@@ -69,13 +69,13 @@ If you have more than one genie in your account, use the standard config for the
 
 ```json
     "accessories": [
-        {
-            "accessory": "Rituals",
-            "name": "Genie",
-            "account": "xxx@xxx.com",
-            "password": "yyyyyyy"
-        }
-    ],
+{
+"accessory": "Rituals",
+"name": "Genie",
+"account": "xxx@xxx.com",
+"password": "yyyyyyy"
+}
+],
 ```
 
 2. Wait for the LOG , like this..
@@ -98,24 +98,29 @@ If you have more than one genie in your account, use the standard config for the
 [7/1/2020, 1:24:44 PM] [Genie] Key: 1
 ```
 
+
+> **Important:** For multiple Genies you must add the "hub" identifier from the log output into your `config.json`.  
+> Without the `hub` entry the plugin cannot resolve which Genie to talk to, and requests will fail with `/hubs/undefined/...`.  
+> Once the correct `hub` hash is added to your config, it will also be stored locally for subsequent starts.
+
 3. declare every accesory with the correspondent hub identifier
 
 ```json
 "accessories": [
-    {
-        "accessory": "Rituals",
-        "name": "Genie 01",
-        "account": "xxx@xxx.com",
-        "password": "yyyyyyy",
-        "hub": "f0123456789f0123456789f0123456789f0123456789f0123456789f01234567"
-    },
-    {
-        "accessory": "Rituals",
-        "name": "Genie 02",
-        "account": "xxx@xxx.com",
-        "password": "yyyyyyy",
-        "hub": "a0123456789a0123456789a0123456789a0123456789a0123456789a01234567"
-    }
+{
+"accessory": "Rituals",
+"name": "Genie 01",
+"account": "xxx@xxx.com",
+"password": "yyyyyyy",
+"hub": "f0123456789f0123456789f0123456789f0123456789f0123456789f01234567"
+},
+{
+"accessory": "Rituals",
+"name": "Genie 02",
+"account": "xxx@xxx.com",
+"password": "yyyyyyy",
+"hub": "a0123456789a0123456789a0123456789a0123456789a0123456789a01234567"
+}
 ],
 ```
 
