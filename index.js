@@ -182,7 +182,11 @@ RitualsAccessory.prototype = {
 
         // Fallback: validate hub from storage
         if (!storedHub) {
-            this.log.warn('No hub found in storage. Probably first start.');
+            if (this.hub) {
+                this.log.warn('No hub found in storage. Using hub from config (first start): ' + this.hub);
+            } else {
+                this.log.warn('No hub found in storage. Probably first start.');
+            }
         } else {
             this.log.debug(`Hub loaded from storage: ${storedHub}`);
         }
@@ -364,6 +368,15 @@ RitualsAccessory.prototype = {
         setTimeout(() => this.authenticateV2(), this.retryDelay);
     },
 
+    resolveHub: function() {
+        const hubFromStorage = this.storage.get('hub');
+        const hub = hubFromStorage || this.hub;
+        if (!hub) {
+            this.log.warn('No hub resolved yet (neither storage nor config). Waiting for discovery...');
+        }
+        return hub;
+    },
+
     getHub: function () {
         const that = this;
         this.log.debug('RitualsAccessory -> init :: getHub()');
@@ -435,6 +448,10 @@ RitualsAccessory.prototype = {
                     that.hublot = hub.hublot;
                     that.fragance = 'Unknown';
 
+                    // Ensure hub is also persisted and normalized when matching by config
+                    that.hub = hub.hash;
+                    that.storage.put('hub', that.hub);
+
                     that.storage.put('key', key);
                     that.storage.put('name', that.name);
                     that.storage.put('hublot', that.hublot);
@@ -473,7 +490,10 @@ RitualsAccessory.prototype = {
             return;
         }
 
-        const hub = that.storage.get('hub');
+        const hub = that.resolveHub();
+        if (!hub) {
+            return callback(new Error('Hub not resolved yet'));
+        }
         that.log.debug(`Retrieving the current status for hub: ${hub}`);
 
         that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/fanc`, null, function(err1, fancRes) {
@@ -541,7 +561,10 @@ RitualsAccessory.prototype = {
             return callback(null, this.cache.fill_level);
         }
 
-        const hub = that.storage.get('hub');
+        const hub = that.resolveHub();
+        if (!hub) {
+            return callback(new Error('Hub not resolved yet'));
+        }
         that.log.debug(`Retrieving fill level for hub: ${hub}`);
 
         // 1. Retrieve fill level
@@ -605,7 +628,10 @@ RitualsAccessory.prototype = {
 
     setActiveState: function(active, callback) {
         const that = this;
-        const hub = that.hub;
+        const hub = that.resolveHub();
+        if (!hub) {
+            return callback(new Error('Hub not resolved yet'), this.on_state);
+        }
         const setValue = active ? '1' : '0';
 
         const path = `apiv2/hubs/${hub}/attributes/fanc`;
@@ -652,7 +678,10 @@ RitualsAccessory.prototype = {
         }
 
         // Fan is on – set FanSpeed directly
-        const hub = that.hub;
+        const hub = that.resolveHub();
+        if (!hub) {
+            return callback(new Error('Hub not resolved yet'), that.fan_speed);
+        }
         const body = qs.stringify({ speedc: value.toString() });
         const url = `apiv2/hubs/${hub}/attributes/speedc`;
 
