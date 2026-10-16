@@ -7,7 +7,6 @@ const axios = require('axios');
 const qs = require('querystring');
 
 const version = require('./package.json').version;
-const author = require('./package.json').author.name;
 
 let Service;
 let Characteristic;
@@ -49,10 +48,14 @@ function RitualsAccessory(log, config) {
         this.hub;
     this.log.debug('RitualsAccessory -> storage path is :: ' + this.user);
 
-    this.on_state;
-    this.fan_speed;
+    this.on_state = false;
+    this.fan_speed = 1;
     this.account = config.account;
     this.password = config.password;
+    // Opt-in: Fan stays the default so existing scenes/automations keep working after an update
+    this.humidifierMode = config.humidifier === true;
+    // Opt-out: preserves the existing Battery service for upgrading users; set to false to remove it
+    this.hasBattery = config.battery !== false;
 
     this.key = this.storage.get('key') || 0;
     this.log.debug('RitualsAccessory -> key :: ' + this.key);
@@ -69,58 +72,60 @@ function RitualsAccessory(log, config) {
     this.fragance = this.storage.get('fragance') || 'N/A';
     this.log.debug('RitualsAccessory -> fragance :: ' + this.fragance);
 
-    var determinate_model = this.version.split('.');
-    if (determinate_model[determinate_model.length - 1] < 12) {
-        this.model_version = '1.0';
+    if (this.humidifierMode) {
+        this.service = new Service.HumidifierDehumidifier(this.name, 'AirFresher');
+        this.service
+            .getCharacteristic(Characteristic.Active)
+            .on('get', this.getActiveState.bind(this))
+            .on('set', this.setActiveState.bind(this));
+
+        this.service
+            .getCharacteristic(Characteristic.CurrentHumidifierDehumidifierState)
+            .on('get', this.getHumidifierState.bind(this));
+
+        // Shows the remaining perfume cartridge fill level (not scent intensity, that's RotationSpeed below)
+        this.service
+            .getCharacteristic(Characteristic.CurrentRelativeHumidity)
+            .on('get', this.getFillState.bind(this));
+
+        this.service
+            .getCharacteristic(Characteristic.TargetHumidifierDehumidifierState)
+            .setProps({
+                validValues: [Characteristic.TargetHumidifierDehumidifierState.HUMIDIFIER]
+            })
+            .on('get', (callback) => {
+                callback(null, Characteristic.TargetHumidifierDehumidifierState.HUMIDIFIER);
+            })
+            .on('set', (value, callback) => {
+                callback();
+            });
     } else {
-        this.model_version = '2.0';
+        this.service = new Service.Fan(this.name, 'AirFresher');
+        this.service
+            .getCharacteristic(Characteristic.On)
+            .on('get', this.getCurrentState.bind(this))
+            .on('set', this.setFanOn.bind(this));
     }
 
-    this.service = new Service.Fan(this.name, 'AirFresher');
-    this.service
-        .getCharacteristic(Characteristic.On)
-        .on('get', this.getCurrentState.bind(this))
-        .on('set', this.setActiveState.bind(this));
-
+    // Intensity control, mapped to speedc (1/2/3 = low/med/high) - shared by Fan and Humidifier mode
     this.service
         .getCharacteristic(Characteristic.RotationSpeed)
         .setProps({
-            minValue: 0,   // HomeKit needs 0–100 %
+            minValue: 0,
             maxValue: 100,
             minStep: 1
         })
-        .on('get', (callback) => {
-            // If off -> 0%, otherwise mapping 1..3 -> percentage values
-            if (!this.on_state) return callback(null, 0);
-            const speed = this.fan_speed ?? 1; // 1..3
-            const pct = speed === 1 ? 33 : speed === 2 ? 66 : 100;
-            callback(null, pct);
-        })
-        .on('set', (value, callback) => {
-            // 1-3 intern values
-            const pct = Math.max(0, Math.min(100, Math.round(Number(value))));
-            const mapped = (pct >= 67) ? 3 : (pct >= 34) ? 2 : 1;
-
-            this.setFanSpeed(mapped, (err) => {
-                if (err) return callback(err);
-                // Slider auf die exakten Buckets schnappen lassen
-                const snapPct = mapped === 3 ? 100 : mapped === 2 ? 66 : 33;
-                try { this.service.updateCharacteristic(Characteristic.RotationSpeed, snapPct); } catch (_) {}
-                callback();
-            });
-        });
+        .on('get', this.getSpeedState.bind(this))
+        .on('set', this.setSpeedState.bind(this));
 
     this.serviceInfo = new Service.AccessoryInformation();
     this.serviceInfo
-        .setCharacteristic(Characteristic.Manufacturer, author)
-        .setCharacteristic(
-            Characteristic.Model,
-            'Rituals Genie ' + this.model_version
-        )
+        .setCharacteristic(Characteristic.Manufacturer, 'Rituals')
+        .setCharacteristic(Characteristic.Model, 'Rituals Genie')
         .setCharacteristic(Characteristic.SerialNumber, this.hublot)
         .setCharacteristic(Characteristic.FirmwareRevision, this.version);
 
-    if (this.model_version == '1.0') {
+    if (this.hasBattery) {
         this.serviceBatt = new Service.Battery('Battery', 'AirFresher');
         this.serviceBatt
             .setCharacteristic(Characteristic.BatteryLevel, '100')
@@ -435,6 +440,8 @@ RitualsAccessory.prototype = {
             that.fragance = 'Unknown';
             that.storage.put('fragance', that.fragance);
 
+            that.storeGenieVersion(that.hub);
+
             that.log.debug('RitualsAccessory -> hub 1 genie updated');
         } else {
             let found = false;
@@ -457,6 +464,8 @@ RitualsAccessory.prototype = {
                     that.storage.put('hublot', that.hublot);
                     that.storage.put('fragance', that.fragance);
 
+                    that.storeGenieVersion(that.hub);
+
                     that.log.debug('RitualsAccessory -> HUB matched and preferences stored');
                 }
             });
@@ -477,6 +486,28 @@ RitualsAccessory.prototype = {
                 that.log.info('************************************************');
             }
         }
+    },
+
+    storeGenieVersion: function(hub) {
+        const that = this;
+
+        that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/sensors/versionc`, null, function(err, versionRes) {
+            if (err) {
+                that.log.debug(`Error while retrieving versionc: ${err}`);
+                return;
+            }
+
+            const firmwareVersion = versionRes && (versionRes.title || versionRes.raw);
+            if (firmwareVersion) {
+                that.version = firmwareVersion;
+                that.storage.put('version', firmwareVersion);
+                that.log.debug(`RitualsAccessory -> Genie firmware version stored :: ${firmwareVersion}`);
+
+                try {
+                    that.serviceInfo.updateCharacteristic(Characteristic.FirmwareRevision, firmwareVersion);
+                } catch (_) {}
+            }
+        });
     },
 
     getCurrentState: function(callback) {
@@ -505,44 +536,67 @@ RitualsAccessory.prototype = {
             that.log.debug(`fancRes received: ${JSON.stringify(fancRes)}`);
 
             that.on_state = fancRes.value === '1';
+            that.cache.on_state = that.on_state;
+            that.cacheTimestamp.getCurrentState = now;
 
-            if (that.on_state) {
-                // Nur wenn eingeschaltet, speedc abrufen TODO: Returns {}
-                that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/speedc`, null, function(err2, speedRes) {
-                    if (err2) {
-                        that.log.debug(`Error while retrieving speedc: ${err2}`);
-                        return callback(err2);
-                    }
+            that.log.debug(`Current status -> on_state: ${that.on_state}`);
 
-                    that.log.debug(`speedRes received: ${JSON.stringify(speedRes)}`);
-
-                    if (that.on_state) {
-                        that.fan_speed = parseInt(speedRes.value) || 1; // wenn API leer, mind. 1
-                    } else {
-                        that.fan_speed = 1; // wenn aus, trotzdem min gültiger Wert
-                    }
-                    that.cache.fan_speed = that.fan_speed;
-                    that.cache.on_state = that.on_state;
-                    that.cacheTimestamp.getCurrentState = now;
-
-                    that.log.debug(`Current status -> on_state: ${that.on_state}, fan_speed: ${that.fan_speed}`);
-
-                    callback(null, that.on_state);
-                });
-            } else {
-                // Ausgeschaltet → keine speedc-Abfrage
-                that.fan_speed = 0;
-                that.cache.fan_speed = that.fan_speed;
-                that.cache.on_state = that.on_state;
-                that.cacheTimestamp.getCurrentState = now;
-
-                that.log.debug(`Current status -> on_state: ${that.on_state}, fan_speed: ${that.fan_speed}`);
-
-                callback(null, that.on_state);
-            }
+            callback(null, that.on_state);
         });
 
         this.log.debug('RitualsAccessory -> finish :: getCurrentState()');
+    },
+
+    getActiveState: function(callback) {
+        this.getCurrentState((err, on_state) => {
+            if (err) return callback(err);
+            callback(null, on_state ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE);
+        });
+    },
+
+    getHumidifierState: function(callback) {
+        this.getCurrentState((err, on_state) => {
+            if (err) return callback(err);
+            callback(null, on_state
+                ? Characteristic.CurrentHumidifierDehumidifierState.HUMIDIFYING
+                : Characteristic.CurrentHumidifierDehumidifierState.INACTIVE);
+        });
+    },
+
+    getSpeedState: function(callback) {
+        const that = this;
+        this.log.debug('RitualsAccessory -> init :: getSpeedState()');
+
+        const now = Date.now();
+        if (this.cacheTimestamp.getSpeedState && (now - this.cacheTimestamp.getSpeedState) < this.cacheDuration) {
+            that.log.debug('Using cached data for getSpeedState');
+            // Fan mode reports 0% while off (as before); the stored intensity is kept for when it's back on
+            if (!this.humidifierMode && !this.on_state) return callback(null, 0);
+            const speed = this.cache.fan_speed ?? 1;
+            return callback(null, speed === 1 ? 33 : speed === 2 ? 66 : 100);
+        }
+
+        const hub = that.resolveHub();
+        if (!hub) {
+            return callback(new Error('Hub not resolved yet'));
+        }
+
+        that.makeAuthenticatedRequest('get', `apiv2/hubs/${hub}/attributes/speedc`, null, function(err, speedRes) {
+            if (err) {
+                that.log.debug(`Error while retrieving speedc: ${err}`);
+                return callback(err);
+            }
+
+            that.log.debug(`speedRes received: ${JSON.stringify(speedRes)}`);
+
+            that.fan_speed = parseInt(speedRes.value, 10) || 1;
+            that.cache.fan_speed = that.fan_speed;
+            that.cacheTimestamp.getSpeedState = now;
+
+            if (!that.humidifierMode && !that.on_state) return callback(null, 0);
+            const pct = that.fan_speed === 1 ? 33 : that.fan_speed === 2 ? 66 : 100;
+            callback(null, pct);
+        });
     },
 
     getFillState: function(callback) {
@@ -626,13 +680,14 @@ RitualsAccessory.prototype = {
         this.log.debug('RitualsAccessory -> finish :: getFillState()');
     },
 
-    setActiveState: function(active, callback) {
+    // Shared by Fan's On and Humidifier's Active - does the actual POST + state/cache bookkeeping
+    setPowerState: function(on_state, callback) {
         const that = this;
         const hub = that.resolveHub();
         if (!hub) {
             return callback(new Error('Hub not resolved yet'), this.on_state);
         }
-        const setValue = active ? '1' : '0';
+        const setValue = on_state ? '1' : '0';
 
         const path = `apiv2/hubs/${hub}/attributes/fanc`;
         const body = qs.stringify({ fanc: setValue });
@@ -649,56 +704,84 @@ RitualsAccessory.prototype = {
 
             that.log.debug(`Response from server: ${JSON.stringify(response)}`);
 
-            that.on_state = active;
-            that.cache.on_state = active;
+            that.on_state = on_state;
+            that.cache.on_state = on_state;
             that.cacheTimestamp.getCurrentState = Date.now();
+
+            try {
+                if (that.humidifierMode) {
+                    that.service.updateCharacteristic(
+                        Characteristic.Active,
+                        on_state ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE
+                    );
+                    that.service.updateCharacteristic(
+                        Characteristic.CurrentHumidifierDehumidifierState,
+                        on_state
+                            ? Characteristic.CurrentHumidifierDehumidifierState.HUMIDIFYING
+                            : Characteristic.CurrentHumidifierDehumidifierState.INACTIVE
+                    );
+                } else {
+                    that.service.updateCharacteristic(Characteristic.On, on_state);
+                }
+            } catch (_) {}
 
             callback();
         });
     },
 
-    setFanSpeed: function(value, callback) {
+    // Humidifier mode's Active set handler
+    setActiveState: function(active, callback) {
+        this.setPowerState(active === Characteristic.Active.ACTIVE, callback);
+    },
+
+    // Fan mode's On set handler
+    setFanOn: function(on, callback) {
+        this.setPowerState(!!on, callback);
+    },
+
+    setSpeedState: function(value, callback) {
         const that = this;
+        const pct = Math.max(0, Math.min(100, Math.round(Number(value))));
+        const mapped = (pct >= 67) ? 3 : (pct >= 34) ? 2 : 1;
 
-        this.log.info(`${that.name} :: Set FanSpeed to => ${value}`);
+        this.log.info(`${that.name} :: Set Speed to => ${mapped}`);
 
-        // If fan is off, turn it on first
+        // If off, turn on first
         if (!that.on_state) {
-            this.log.debug('Fan is off – turn it on first');
+            this.log.debug('Genie is off – turn it on first');
 
-            return this.setActiveState(true, function(err) {
-                if (err) {
-                    that.log.error(`Turning on before setting speed failed: ${err.message}`);
-                    return callback(err, that.fan_speed);
-                }
-
-                // Now set FanSpeed
-                that.setFanSpeed(value, callback);
+            return this.setPowerState(true, function(err) {
+                if (err) return callback(err);
+                that.setSpeedState(value, callback);
             });
         }
 
-        // Fan is on – set FanSpeed directly
         const hub = that.resolveHub();
         if (!hub) {
-            return callback(new Error('Hub not resolved yet'), that.fan_speed);
+            return callback(new Error('Hub not resolved yet'));
         }
-        const body = qs.stringify({ speedc: value.toString() });
-        const url = `apiv2/hubs/${hub}/attributes/speedc`;
 
-        that.log.debug(`POST URL: ${url}`);
-        that.log.debug(`POST Body (x-www-form-urlencoded): ${body}`);
+        const path = `apiv2/hubs/${hub}/attributes/speedc`;
+        const body = qs.stringify({ speedc: mapped.toString() });
 
-        that.makeAuthenticatedRequest('post', url, body, function(err, response) {
+        this.log.debug(`POST URL: ${path}`);
+        this.log.debug(`POST Body (x-www-form-urlencoded): ${body}`);
+
+        that.makeAuthenticatedRequest('post', path, body, function(err, response) {
             if (err) {
-                that.log.error(`Error while setting FanSpeed: ${err.message}`);
-                return callback(err, that.fan_speed);
+                that.log.error(`Error while setting speed: ${err.message}`);
+                return callback(err);
             }
 
             that.log.debug(`Response from server: ${JSON.stringify(response)}`);
 
-            that.fan_speed = value;
-            that.cache.fan_speed = value;
-            that.cacheTimestamp.getCurrentState = Date.now();
+            that.fan_speed = mapped;
+            that.cache.fan_speed = mapped;
+            that.cacheTimestamp.getSpeedState = Date.now();
+
+            // Snap the slider to the exact bucket (33/66/100%) instead of leaving the dragged value
+            const snapPct = mapped === 3 ? 100 : mapped === 2 ? 66 : 33;
+            try { that.service.updateCharacteristic(Characteristic.RotationSpeed, snapPct); } catch (_) {}
 
             callback();
         });

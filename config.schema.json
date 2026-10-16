@@ -18,15 +18,25 @@
         "required": true
       },
       "account": {
-        "title": "E-Mail Account",
+        "title": "E-mail",
         "type": "string",
         "required": true
       },
       "password": {
-        "title": "Passwort",
+        "title": "Password",
         "type": "string",
         "format": "password",
         "required": true
+      },
+      "humidifier": {
+        "title": "Show as Humidifier instead of Fan (opt-in, changes the HomeKit service type)",
+        "type": "boolean",
+        "default": false
+      },
+      "battery": {
+        "title": "Show Battery service (static 100%/charging reading, not a real measurement - untick if your Genie has no battery)",
+        "type": "boolean",
+        "default": true
       }
     }
   }
